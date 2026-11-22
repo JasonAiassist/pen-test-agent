@@ -1,0 +1,4 @@
+{"level": 1, "cap_per_s": 5, "measured_per_s": 4.85, "allowed_max_per_s": 5, "completed": 82, "failed_or_dropped": 185, "gateway_conn_cap_drops": 618, "gateway_accepted": 82, "pass": true}
+{"level": 2, "cap_per_s": 20, "measured_per_s": 20.0, "allowed_max_per_s": 20, "completed": 322, "failed_or_dropped": 149, "gateway_conn_cap_drops": 604, "gateway_accepted": 322, "pass": true}
+{"level": 3, "cap_per_s": 50, "measured_per_s": 49.15, "allowed_max_per_s": 50, "completed": 794, "failed_or_dropped": 40, "gateway_conn_cap_drops": 560, "gateway_accepted": 794, "pass": true}
+RESULT: PASS

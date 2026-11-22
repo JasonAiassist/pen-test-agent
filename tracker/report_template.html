@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<!--
+  penenv penetration-test report template.
+  This file is the single place that controls the LOOK of every generated report,
+  so edit it (not report.py) to rebrand or restyle. report.py fills these tokens:
+    TITLE       document title
+    BRAND       vendor / team name shown on the cover and footer
+    CONTENT     the generated report body (cover, contents, sections, appendix)
+    GENERATED   timestamp the report was produced
+  (each written in the file as the name wrapped in double curly braces)
+  Colours are CSS variables under :root so a rebrand is a few lines.
+  Layout is tuned for both screen and print/PDF (@page rules at the bottom).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}}</title>
+<style>
+:root{
+  --brand:#0b3d6b;          /* primary brand colour (cover, headings)   */
+  --brand-ink:#082a4a;
+  --accent:#1f78c1;
+  --ink:#1b222b;            /* body text                                */
+  --muted:#5b6670;
+  --line:#d8dee6;
+  --panel:#f4f7fa;
+  --code-bg:#0f172a; --code-ink:#e6edf6;
+  --crit:#9b1c1c; --high:#c2410c; --med:#b45309; --low:#2563eb; --info:#475569;
+  --crit-bg:#fdecec; --high-bg:#fdeee3; --med-bg:#fef5e3; --low-bg:#e8f0fe; --info-bg:#eef1f4;
+  --font: "Segoe UI", "Helvetica Neue", Arial, system-ui, sans-serif;
+  --mono: "SFMono-Regular", "Consolas", "Liberation Mono", Menlo, monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{font-family:var(--font);color:var(--ink);font-size:13px;line-height:1.55;background:#fff}
+.page{max-width:900px;margin:0 auto;padding:0 48px}
+h1,h2,h3,h4{color:var(--brand-ink);line-height:1.25;font-weight:650}
+h1{font-size:23px;margin:0 0 6px} h2{font-size:18px;margin:34px 0 10px;padding-bottom:6px;border-bottom:2px solid var(--brand)}
+h3{font-size:15px;margin:22px 0 6px} h4{font-size:13px;margin:16px 0 4px;color:var(--brand)}
+p{margin:0 0 10px} ul,ol{margin:0 0 10px;padding-left:22px} li{margin:2px 0}
+a{color:var(--accent);text-decoration:none}
+code{font-family:var(--mono);font-size:12px;background:var(--panel);border:1px solid var(--line);border-radius:4px;padding:0 4px}
+pre{font-family:var(--mono);font-size:11.5px;line-height:1.45;background:var(--code-bg);color:var(--code-ink);
+    border-radius:7px;padding:12px 14px;overflow-x:auto;margin:0 0 12px;white-space:pre;word-break:normal}
+pre code{background:none;border:0;color:inherit;padding:0;font-size:inherit}
+table{border-collapse:collapse;width:100%;margin:0 0 14px;font-size:12px}
+th,td{border:1px solid var(--line);padding:7px 9px;text-align:left;vertical-align:top}
+th{background:var(--panel);font-weight:650;color:var(--brand-ink)}
+
+/* ---- cover ---- */
+.cover{min-height:960px;display:flex;flex-direction:column;justify-content:space-between;
+       padding:60px 56px;color:#fff;background:linear-gradient(150deg,var(--brand) 0%,var(--brand-ink) 60%,#041d33 100%)}
+.cover .mark{font-size:13px;letter-spacing:3px;text-transform:uppercase;opacity:.85}
+.cover .ttl{font-size:40px;font-weight:700;color:#fff;margin:14px 0 10px;line-height:1.1}
+.cover .sub{font-size:18px;opacity:.92;margin-bottom:28px}
+.cover .classif{display:inline-block;border:1px solid rgba(255,255,255,.6);border-radius:4px;
+       padding:4px 12px;font-size:12px;letter-spacing:2px;text-transform:uppercase}
+.cover dl{display:grid;grid-template-columns:auto 1fr;gap:6px 22px;margin:0;font-size:13.5px}
+.cover dt{opacity:.7;text-transform:uppercase;letter-spacing:1px;font-size:11px;align-self:center}
+.cover dd{margin:0;font-weight:600}
+.cover .foot{font-size:12px;opacity:.8;border-top:1px solid rgba(255,255,255,.25);padding-top:14px}
+
+/* ---- contents ---- */
+.toc{list-style:none;padding:0;margin:8px 0 0}
+.toc li{display:flex;align-items:baseline;gap:8px;margin:5px 0;font-size:13.5px}
+.toc li .t{color:var(--ink)} .toc li.sub{padding-left:22px;font-size:12.5px;color:var(--muted)}
+.toc .dots{flex:1;border-bottom:1px dotted var(--line);transform:translateY(-3px)}
+.toc .pg{color:var(--muted);font-variant-numeric:tabular-nums}
+
+/* ---- severity + summary ---- */
+.badge{display:inline-block;border-radius:4px;padding:1px 8px;font-size:11px;font-weight:700;
+       letter-spacing:.5px;text-transform:uppercase;border:1px solid}
+.sev-critical{color:var(--crit);background:var(--crit-bg);border-color:var(--crit)}
+.sev-high{color:var(--high);background:var(--high-bg);border-color:var(--high)}
+.sev-medium{color:var(--med);background:var(--med-bg);border-color:var(--med)}
+.sev-low{color:var(--low);background:var(--low-bg);border-color:var(--low)}
+.sev-info{color:var(--info);background:var(--info-bg);border-color:var(--info)}
+.sevgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin:6px 0 16px}
+.sevcard{border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center;background:#fff}
+.sevcard .n{font-size:30px;font-weight:750;line-height:1}
+.sevcard .l{font-size:11px;letter-spacing:1px;text-transform:uppercase;margin-top:4px;color:var(--muted)}
+.sevcard.critical{border-top:4px solid var(--crit)} .sevcard.critical .n{color:var(--crit)}
+.sevcard.high{border-top:4px solid var(--high)} .sevcard.high .n{color:var(--high)}
+.sevcard.medium{border-top:4px solid var(--med)} .sevcard.medium .n{color:var(--med)}
+.sevcard.low{border-top:4px solid var(--low)} .sevcard.low .n{color:var(--low)}
+.sevcard.info{border-top:4px solid var(--info)} .sevcard.info .n{color:var(--info)}
+.bar{height:14px;border-radius:7px;overflow:hidden;display:flex;border:1px solid var(--line);margin:4px 0 18px}
+.bar span{display:block}
+.bar .b-critical{background:var(--crit)} .bar .b-high{background:var(--high)}
+.bar .b-medium{background:var(--med)} .bar .b-low{background:var(--low)} .bar .b-info{background:var(--info)}
+
+.callout{border-left:4px solid var(--accent);background:var(--panel);padding:10px 14px;border-radius:0 6px 6px 0;margin:0 0 14px}
+.muted{color:var(--muted)} .small{font-size:11.5px}
+
+/* ---- finding cards ---- */
+.finding{border:1px solid var(--line);border-radius:9px;margin:0 0 20px;overflow:hidden;break-inside:avoid}
+.finding>.head{display:flex;flex-wrap:wrap;align-items:center;gap:10px;padding:11px 14px;border-bottom:1px solid var(--line);background:var(--panel)}
+.finding>.head .fid{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.finding>.head .name{font-size:14px;font-weight:650;color:var(--brand-ink);flex:1;min-width:220px}
+.finding>.body{padding:12px 16px}
+.meta{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:6px 14px;margin:0 0 12px;font-size:12px}
+.meta .k{color:var(--muted);text-transform:uppercase;letter-spacing:.5px;font-size:10px}
+.fsec{margin:12px 0 0} .fsec>h4{margin:0 0 4px}
+.cvss{font-weight:750;font-variant-numeric:tabular-nums}
+
+@media print{
+  @page{size:A4;margin:16mm 14mm 18mm;
+    @bottom-center{content:"{{BRAND}} — confidential";font-family:var(--font);font-size:9px;color:#8a94a0}
+    @bottom-right{content:"Page " counter(page) " of " counter(pages);font-family:var(--font);font-size:9px;color:#8a94a0}}
+  body{font-size:11.5px}
+  .page{max-width:none;padding:0}
+  .cover{min-height:auto;height:247mm;page-break-after:always}
+  .page-break{page-break-before:always}
+  h2{page-break-after:avoid} h3,h4{page-break-after:avoid}
+  .finding{break-inside:avoid} pre{white-space:pre-wrap;word-break:break-word}
+  a{color:var(--ink)}
+}
+</style>
+</head>
+<body>
+{{CONTENT}}
+</body>
+</html>

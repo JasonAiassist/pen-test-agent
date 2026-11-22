@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+# penenv - self-hosted SaaS penetration-test environment driven by Strix.
+#
+#   penenv up [target]        start a demo target container (default juice-shop)
+#   penenv down [target]      stop it
+#   penenv status             containers + services overview
+#   penenv scan URL [opts]    run a Strix scan against YOUR app (see flags below)
+#   penenv scan --project NAME [--dry-run] [-p PROFILE] [--max-budget USD]
+#                             policy-enforced scan of a saved tracker project
+#   penenv demo               scan the local Juice Shop (full profile)
+#   penenv tracker [cmd]      start|stop|restart|url - vulnerability dashboard
+#   penenv ingest             re-ingest strix_runs/ into the tracker DB
+#   penenv report (--project NAME | --run ID) [--out DIR] [--formats html,pdf,docx]
+#                             build a formatted pen-test report (HTML/PDF/Word)
+#
+# Scan profile selection (added automatically to strix as --instruction-file):
+#   penenv scan URL -p auth-session|access-control|injection|api-security|business-logic|data-exposure|full-saas [-m quick|standard|deep]
+# Any extra args after the known ones are passed straight to strix.
+
+set -uo pipefail
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+PROFILES_DIR="$ROOT/profiles"
+TRACKER_PID="$ROOT/tracker/.tracker.pid"
+TRACKER_URL="http://127.0.0.1:8766"
+
+# ---- docker access (docker group socket may need sg/newgrp) ---------------
+run_docker() {
+  if docker info >/dev/null 2>&1; then
+    docker "$@"
+    return
+  fi
+  if command -v sg >/dev/null 2>&1; then
+    local cmd="docker"
+    local a
+    for a in "$@"; do cmd+=" $(printf '%q' "$a")"; done
+    sg docker -c "$cmd"
+    return
+  fi
+  { printf 'exec docker'; local a
+    for a in "$@"; do printf ' %q' "$a"; done; printf '\n'; } | newgrp docker
+}
+
+# strix drives its own sandbox container, so it needs the same docker access.
+run_strix() {
+  if docker info >/dev/null 2>&1; then
+    strix "$@"
+    return
+  fi
+  if command -v sg >/dev/null 2>&1; then
+    local cmd="strix"
+    local a
+    for a in "$@"; do cmd+=" $(printf '%q' "$a")"; done
+    sg docker -c "$cmd"
+    return
+  fi
+  { printf 'exec strix'; local a
+    for a in "$@"; do printf ' %q' "$a"; done; printf '\n'; } | newgrp docker
+}
+
+have_target() {
+  local name="${1:-juice-shop}"
+  local file="$ROOT/compose/targets/$name.yaml"
+  [[ -f "$file" ]] || { echo "no target compose at $file"; return 1; }
+  run_docker compose -f "$file" "${@:2}"
+}
+
+wait_http() {
+  local url="$1" tries="${2:-30}"
+  for _ in $(seq "$tries"); do
+    curl -fsS -o /dev/null "$url" 2>/dev/null && return 0
+    sleep 1
+  done
+  return 1
+}
+
+cmd_up() {
+  local name="${1:-juice-shop}"
+  echo "[penenv] starting target '$name'…"
+  have_target "$name" up -d || return 1
+  case "$name" in
+    juice-shop)
+      if wait_http http://127.0.0.1:3000/; then
+        echo "[penenv] Juice Shop ready at http://127.0.0.1:3000"
+      else echo "[penenv] WARNING: port 3000 not answering yet"; fi ;;
+    *) echo "[penenv] target '$name' started" ;;
+  esac
+}
+
+cmd_down() {
+  local name="${1:-juice-shop}"
+  echo "[penenv] stopping target '$name'…"
+  have_target "$name" down
+}
+
+cmd_status() {
+  echo "== containers =="
+  run_docker ps --format 'table {{.Names}}\t{{.Status}}\t{{.Ports}}'
+  echo "== tracker =="
+  if [[ -f "$TRACKER_PID" ]] && kill -0 "$(cat "$TRACKER_PID")" 2>/dev/null; then
+    echo "running: $TRACKER_URL"
+  else
+    echo "stopped (start with: penenv tracker start)"
+  fi
+  echo "== runs =="
+  ls -1 "$ROOT/strix_runs" 2>/dev/null | tail -5 || echo "(none yet)"
+}
+
+cmd_tracker() {
+  local action="${1:-start}"
+  case "$action" in
+    start)
+      if curl -sf "$TRACKER_URL/api/summary" >/dev/null 2>&1; then
+        echo "[penenv] tracker already running at $TRACKER_URL"; return 0
+      fi
+      rm -f "$TRACKER_PID"
+      ( cd "$ROOT" && nohup python3 tracker/server.py >> tracker/tracker.log 2>&1 & )
+      sleep 1
+      if curl -sf "$TRACKER_URL/api/summary" >/dev/null 2>&1; then
+        echo "[penenv] tracker running at $TRACKER_URL"
+      else
+        echo "[penenv] tracker failed to start; see tracker/tracker.log"; return 1
+      fi ;;
+    stop)
+      if [[ -f "$TRACKER_PID" ]]; then
+        kill "$(cat "$TRACKER_PID")" 2>/dev/null; rm -f "$TRACKER_PID"
+        echo "[penenv] tracker stopped"
+      elif curl -sf "$TRACKER_URL/api/summary" >/dev/null 2>&1; then
+        echo "[penenv] tracker is serving $TRACKER_URL but no pid file; leaving it alone"
+      else echo "[penenv] tracker not running"; fi ;;
+    restart) cmd_tracker stop; sleep 1; cmd_tracker start ;;
+    url) echo "$TRACKER_URL" ;;
+    *) echo "usage: penenv tracker [start|stop|restart|url]"; return 1 ;;
+  esac
+}
+
+# Policy-enforced scan of a saved tracker project (egress gateway, deny stubs, tool policy).
+cmd_scan_project() {
+  local args="" a
+  for a in "$@"; do args+=" $(printf '%q' "$a")"; done
+  if docker info >/dev/null 2>&1; then
+    eval "python3 $(printf '%q' "$ROOT/tracker/scanrun.py") $args"; return
+  fi
+  if command -v sg >/dev/null 2>&1; then
+    sg docker -c "python3 $(printf '%q' "$ROOT/tracker/scanrun.py") $args"; return
+  fi
+  printf 'exec python3 %q%s\n' "$ROOT/tracker/scanrun.py" "$args" | newgrp docker
+}
+
+cmd_scan() {
+  if [[ "${1:-}" == --project || "${1:-}" == --project=* ]]; then cmd_scan_project "$@"; return; fi
+  local target="$1"; shift || true
+  local profile="full-saas" mode="standard" extra=()
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -p|--profile) profile="$2"; shift 2 ;;
+      -m|--mode) mode="$2"; shift 2 ;;
+      *) extra+=("$1"); shift ;;
+    esac
+  done
+  local prof="$PROFILES_DIR/$profile.md"
+  [[ -f "$prof" ]] || { echo "unknown profile '$profile' (see profiles/)"; return 1; }
+  echo "[penenv] scan target=$target profile=$profile mode=$mode"
+  cd "$ROOT" || return 1
+  run_strix -t "$target" -m "$mode" --instruction-file "$prof" -n "${extra[@]}"
+}
+
+cmd_demo() {
+  cmd_up juice-shop >/dev/null 2>&1
+  wait_http http://127.0.0.1:3000/ || { echo "[penenv] Juice Shop not reachable"; return 1; }
+  echo "[penenv] demo scan against local Juice Shop"
+  ( cd "$ROOT" && run_strix -t http://127.0.0.1:3000 -m quick \
+      --instruction-file "$PROFILES_DIR/demo-juice-shop.md" -n )
+  python3 "$ROOT/tracker/ingest.py"
+  echo "[penenv] dashboard: $TRACKER_URL (start with: penenv tracker start)"
+}
+
+cmd_report() {
+  cd "$ROOT" || return 1
+  python3 "$ROOT/tracker/report.py" "$@"
+}
+
+case "${1:-help}" in
+  up) shift; cmd_up "$@" ;;
+  down) shift; cmd_down "$@" ;;
+  status) cmd_status ;;
+  scan) shift; cmd_scan "$@" ;;
+  demo) cmd_demo ;;
+  tracker) shift; cmd_tracker "$@" ;;
+  ingest) python3 "$ROOT/tracker/ingest.py" ;;
+  report) shift; cmd_report "$@" ;;
+  help|*) sed -n '2,20p' "$0" ;;
+esac

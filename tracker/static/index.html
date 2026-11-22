@@ -1,0 +1,1177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>penenv tracker</title>
+<style>
+:root{
+  --bg:#0d1117;--panel:#161b22;--border:#30363d;--text:#e6edf3;--dim:#8b949e;
+  --red:#f85149;--orange:#f0883e;--yellow:#d29922;--blue:#58a6ff;--green:#3fb950;
+  --purple:#bc8cff;--chip:#21262d;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);
+  font:14px/1.45 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 60px}
+h1{font-size:18px;margin:0}
+.meta{color:var(--dim);font-size:12px;margin-top:4px}
+.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.tabs{display:flex;gap:6px;margin:18px 0 14px;border-bottom:1px solid var(--border)}
+.tab{padding:8px 16px;cursor:pointer;color:var(--dim);border:1px solid transparent;border-bottom:none}
+.tab.active{color:var(--text);background:var(--panel);border-color:var(--border);
+  border-radius:6px 6px 0 0}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:18px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:12px 14px}
+.card .n{font-size:26px;font-weight:700}
+.card .l{color:var(--dim);font-size:11px;text-transform:uppercase;letter-spacing:.08em}
+.card.total .n{color:var(--text)}
+.card.CRITICAL .n{color:var(--red)}.card.HIGH .n{color:var(--orange)}
+.card.MEDIUM .n{color:var(--yellow)}.card.LOW .n{color:var(--blue)}.card.INFO .n{color:var(--dim)}
+.card.fixed .n{color:var(--green)}
+.panel{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:18px}
+.panel h2{font-size:13px;margin:0 0 10px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px;align-items:center}
+.chip{background:var(--chip);border:1px solid var(--border);color:var(--dim);
+  padding:4px 12px;border-radius:14px;cursor:pointer;font-size:12px}
+.chip.active{color:var(--text);border-color:var(--blue)}
+.search{flex:1;min-width:160px;background:var(--chip);border:1px solid var(--border);
+  color:var(--text);padding:5px 10px;border-radius:6px;font:inherit;font-size:12px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{color:var(--dim);text-align:left;font-weight:400;padding:6px 8px;border-bottom:1px solid var(--border)}
+td{padding:6px 8px;border-bottom:1px solid #21262d;vertical-align:top}
+tr.fmain{cursor:pointer}
+tr.fmain:hover td{background:#1c2129}
+.badge{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:700}
+.badge.CRITICAL{background:#3d1016;color:var(--red)}
+.badge.HIGH{background:#33210b;color:var(--orange)}
+.badge.MEDIUM{background:#2b2410;color:var(--yellow)}
+.badge.LOW{background:#0f2437;color:var(--blue)}
+.badge.INFO{background:#21262d;color:var(--dim)}
+.st-open{color:var(--red)}.st-reopened{color:var(--orange)}
+.st-fixed{color:var(--green)}.st-accepted{color:var(--blue)}.st-false_positive{color:var(--dim)}
+.method{color:var(--purple);font-weight:700}
+.endpoint{word-break:break-all}
+select.status{background:var(--chip);color:var(--text);border:1px solid var(--border);
+  border-radius:5px;font:inherit;font-size:11px;padding:2px 4px}
+tr.fdetail td{background:#10151d}
+.evidence{white-space:pre-wrap;color:var(--dim);font-size:11px;max-height:200px;overflow:auto}
+.linkish{color:var(--blue);cursor:pointer;text-decoration:underline}
+.repblock{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;margin:8px 0 0}
+.repblock .rep-status{font-size:12px}
+.repblock a{color:var(--blue);text-decoration:none;border:1px solid var(--border);border-radius:5px;padding:3px 9px;background:var(--chip);white-space:nowrap}
+.repblock a:hover{border-color:var(--blue)}
+.bars{display:flex;align-items:flex-end;gap:14px;height:120px;padding-top:6px}
+.bar{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--dim)}
+.bar .fill{width:38px;background:var(--blue);border-radius:3px 3px 0 0;min-height:3px}
+.bar .fill.new{background:var(--red)}
+.bar .n{color:var(--text);font-size:12px;font-weight:700}
+button{background:var(--chip);color:var(--text);border:1px solid var(--border);
+  border-radius:6px;padding:6px 14px;font:inherit;font-size:12px;cursor:pointer}
+button:hover{border-color:var(--blue)}
+button.primary{background:#1f3a5f;border-color:var(--blue)}
+button.danger{color:var(--red)}
+button:disabled{opacity:.5;cursor:default}
+#toast{position:fixed;right:16px;bottom:16px;background:var(--panel);border:1px solid var(--green);
+  color:var(--text);padding:10px 16px;border-radius:8px;display:none;z-index:50;font-size:12px}
+#toast.err{border-color:var(--red)}
+/* project page */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:900px){.grid2{grid-template-columns:1fr}}
+.fgroup{margin-bottom:14px}
+.fgroup label{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;
+  letter-spacing:.06em;margin-bottom:5px}
+input[type=text],textarea,select.field{width:100%;background:var(--chip);border:1px solid var(--border);
+  color:var(--text);border-radius:6px;padding:7px 10px;font:inherit;font-size:12px}
+textarea{resize:vertical;min-height:64px}
+.listbox{border:1px solid var(--border);border-radius:6px;background:var(--chip)}
+.listrow{display:flex;gap:6px;padding:5px 6px;border-bottom:1px solid #21262d;align-items:center}
+.listrow:last-child{border-bottom:none}
+.listrow input{flex:1;background:transparent;border:none;color:var(--text);font:inherit;font-size:12px;
+  padding:3px 4px;outline:none}
+.listrow input:focus{background:#10151d;border-radius:4px}
+.listrow .rm{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;padding:2px 6px}
+.addrow{display:flex;gap:6px;padding:6px}
+.addrow input{flex:1}
+.switches{display:grid;grid-template-columns:1fr 1fr;gap:8px 18px}
+.swgrid{width:100%;border-collapse:collapse;font-size:12px}
+.swgrid td{padding:3px 6px;border-bottom:1px solid var(--border);vertical-align:middle}
+.swgrid tr.grp td{font-weight:600;color:var(--muted);padding-top:10px;border-bottom:none}
+.swgrid select{font-size:11px;padding:1px 4px}
+.swgrid .res-on{color:var(--green,#3fb950);font-weight:600}.swgrid .res-off{color:var(--muted)}
+.swgrid .cls{font-size:10px;color:var(--muted);white-space:nowrap}
+.swgrid tr.forced td:first-child{border-left:3px solid var(--orange,#d29922)}
+.swwarn{margin:6px 0;font-size:12px;color:var(--orange,#d29922)}
+.evrow{font-family:ui-monospace,monospace;font-size:11px;white-space:pre-wrap;word-break:break-all}
+@media(max-width:700px){.switches{grid-template-columns:1fr}}
+.sw{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text);cursor:pointer}
+.sw input{accent-color:var(--blue)}
+.keysafe-row{display:grid;grid-template-columns:110px 1fr 1fr 1.4fr 26px;gap:6px;padding:4px 6px}
+.keysafe-row input{background:transparent;border:none;color:var(--text);font:inherit;font-size:12px;
+  padding:3px 4px;outline:none}
+.keysafe-head{color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+  padding:4px 6px 0}
+.proj-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.save-state{color:var(--dim);font-size:11px}
+.delta-up{color:var(--red);font-weight:700}
+.delta-down{color:var(--green);font-weight:700}
+.proj-list-item{display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:8px 10px;border-bottom:1px solid #21262d;cursor:pointer}
+.proj-list-item:hover{background:#1c2129}
+.proj-list-item:last-child{border-bottom:none}
+.proj-sub{color:var(--dim);font-size:11px}
+.empty{color:var(--dim);font-size:12px;padding:8px 2px}
+.hidden{display:none!important}
+/* typed scope rows */
+.scoperow{display:grid;grid-template-columns:118px 1fr 26px;gap:6px;padding:5px 6px;border-bottom:1px solid #21262d;align-items:center}
+.scoperow:last-child{border-bottom:none}
+.scoperow select,.scoperow input{background:#10151d;border:1px solid var(--border);color:var(--text);
+  border-radius:4px;font:inherit;font-size:12px;padding:3px 5px;outline:none;width:100%}
+.scoperow.err input{border-color:var(--red)}
+.scoperow.warn input{border-color:var(--yellow)}
+.rowmsg{grid-column:1/-1;font-size:11px;padding:0 2px}
+.rowmsg.err{color:var(--red)} .rowmsg.warn{color:var(--yellow)}
+.scoperow .rm{background:none;border:none;color:var(--red);cursor:pointer;font-size:13px;padding:2px 6px}
+.scoperow.addline{background:#0f141b}
+.banner{border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:6px;padding:7px 10px;
+  font-size:11px;color:var(--dim);margin:6px 0 12px}
+.banner.warn{border-left-color:var(--yellow)}
+/* credentials */
+.cred{border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin:8px 0;background:var(--chip)}
+.cred.err{border-color:var(--red)}
+.cred-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.cred-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px 10px}
+.cred-grid label{display:block;color:var(--dim);font-size:10px;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px}
+.cred-grid input{width:100%;background:#10151d;border:1px solid var(--border);color:var(--text);
+  border-radius:4px;font:inherit;font-size:12px;padding:4px 6px;outline:none}
+.cred-grid input.masked{color:var(--yellow)}
+.cred-grid .full{grid-column:1/-1}
+.pw{display:flex;gap:4px}.pw button{padding:2px 7px}
+.otp{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.otp code{background:#10151d;padding:2px 6px;border-radius:4px;font-size:13px;letter-spacing:.1em}
+.disabled-panel{opacity:.45;pointer-events:none}
+/* horizontal scrolling: wide tables scroll inside their panel instead of being squashed or clipped */
+html{scrollbar-color:#484f58 var(--bg)}
+.tscroll{overflow-x:auto;max-width:100%;scrollbar-width:auto;scrollbar-color:#484f58 #10151d;padding-bottom:4px}
+.tscroll::-webkit-scrollbar{height:10px}
+.tscroll::-webkit-scrollbar-thumb{background:#484f58;border-radius:5px}
+.tscroll::-webkit-scrollbar-track{background:#10151d}
+#runsTable{min-width:620px}
+#findTable{min-width:860px}
+.swgrid{min-width:640px}
+.bars{overflow-x:auto}
+.grid2>*{min-width:0}
+td,th{white-space:nowrap}
+#findTable td:nth-child(4),#findTable td:nth-child(5){white-space:normal;min-width:180px}
+tr.fdetail td{white-space:normal}
+.swgrid td:last-child{white-space:normal}
+/* project sub-tabs */
+.projbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
+.projbar .cur{font-size:14px}
+.subtabs{display:flex;gap:4px;margin:4px 0 14px;border-bottom:1px solid var(--border);overflow-x:auto}
+.stab{padding:7px 14px;cursor:pointer;color:var(--dim);border:1px solid transparent;border-bottom:none;
+  white-space:nowrap;font-size:13px}
+.stab.active{color:var(--text);background:var(--panel);border-color:var(--border);border-radius:6px 6px 0 0}
+.stab .cnt{display:inline-block;margin-left:6px;padding:0 6px;border-radius:9px;font-size:10px;font-weight:700}
+.stab .cnt.err{background:#3d1016;color:var(--red)}
+.stab .cnt.warn{background:#2b2410;color:var(--yellow)}
+.stab .cnt.info{background:var(--chip);color:var(--dim)}
+.ppane .lead{color:var(--dim);font-size:12px;margin:-4px 0 12px}
+.summary-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.summary-grid .card .n{font-size:15px}
+/* in-page confirm dialog */
+.modal-bg{position:fixed;inset:0;background:rgba(1,4,9,.7);display:flex;align-items:center;justify-content:center;z-index:50;padding:16px}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:18px 20px;max-width:520px;width:100%}
+.modal-msg{white-space:pre-wrap;margin-bottom:14px}
+.modal-btns{display:flex;gap:8px;justify-content:flex-end}
+/* never let content push the page wider than the window */
+html,body{max-width:100%;overflow-x:hidden}
+.wrap{width:100%;min-width:0}
+.panel,.panel>*,.fgroup,.scan-opts>*,.proj-actions{min-width:0;max-width:100%}
+select.field,input,textarea{max-width:100%}
+.banner,.proj-sub,#scanMonitorMeta,.rowmsg{overflow-wrap:anywhere}
+.proj-actions{flex-wrap:wrap}
+.launch-item>span:first-child{min-width:0;overflow-wrap:anywhere}
+.tabs{flex-wrap:wrap}
+/* new-scan tab */
+.scanlog{background:#0a0e14;border:1px solid var(--border);border-radius:6px;padding:10px 12px;
+  font:11px/1.5 ui-monospace,monospace;white-space:pre-wrap;word-break:break-word;color:var(--dim);
+  max-height:360px;overflow:auto;min-height:120px}
+.runstate{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:700}
+.runstate.running{background:#0f2437;color:var(--blue)}
+.runstate.clean{background:#10281a;color:var(--green)}
+.runstate.found{background:#33210b;color:var(--orange)}
+.runstate.error{background:#3d1016;color:var(--red)}
+.runstate.stopped{background:#21262d;color:var(--dim)}
+.scan-opts{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px 18px;align-items:end}
+.spin{display:inline-block;width:11px;height:11px;border:2px solid var(--blue);border-top-color:transparent;
+  border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px;margin-right:4px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.launch-item{display:flex;justify-content:space-between;gap:10px;align-items:center;
+  padding:7px 8px;border-bottom:1px solid #21262d;cursor:pointer}
+.launch-item:hover{background:#1c2129}.launch-item:last-child{border-bottom:none}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <div>
+      <h1>penenv tracker</h1>
+      <div class="meta" id="meta">loading…</div>
+    </div>
+    <button id="ingestBtn">Re-ingest runs</button>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="dash">Dashboard</div>
+    <div class="tab" data-tab="proj">Project</div>
+    <div class="tab" data-tab="scan">New scan</div>
+  </div>
+
+  <!-- ================= Dashboard tab ================= -->
+  <div id="tab-dash" data-toptab="dash">
+    <div class="cards" id="cards"></div>
+    <div class="panel">
+      <h2>Findings per run</h2>
+      <div class="bars" id="bars"></div>
+    </div>
+    <div class="panel">
+      <h2>Scan runs</h2>
+      <div class="tscroll"><table id="runsTable"></table></div>
+    </div>
+    <div class="panel">
+      <h2>Findings</h2>
+      <div class="chips" id="filterChips">
+        <span class="chip active" data-f="active">Active</span>
+        <span class="chip" data-f="all">All</span>
+        <span class="chip" data-f="fixed">Fixed</span>
+        <span class="chip" data-f="accepted">Accepted</span>
+        <span class="chip" data-f="false_positive">False positive</span>
+        <input class="search" id="search" placeholder="search title / endpoint / evidence…">
+      </div>
+      <div class="tscroll"><table id="findTable"></table></div>
+    </div>
+  </div>
+
+  <!-- ================= Project tab ================= -->
+  <div id="tab-proj" class="hidden" data-toptab="proj">
+    <!-- project picker + save: always visible, whichever sub-tab is open -->
+    <div class="panel">
+      <div class="projbar">
+        <div><span class="proj-sub">Editing</span> <b class="cur" id="pCurName">new project</b>
+          <span class="save-state" id="pSaveState"></span></div>
+        <div class="proj-actions" style="margin:0">
+          <button id="pNew" title="start a blank project">＋ new project</button>
+          <button class="primary" id="pSave">Save project</button>
+          <button class="danger" id="pDelete">Delete</button>
+        </div>
+      </div>
+      <details id="pPicker" style="margin-top:10px">
+        <summary class="proj-sub" style="cursor:pointer">Open another project…</summary>
+        <div class="chips" id="projChips" style="display:block;margin:8px 0 0"></div>
+      </details>
+    </div>
+
+    <div class="subtabs" id="pSubtabs">
+      <div class="stab active" data-stab="overview">1 · Overview</div>
+      <div class="stab" data-stab="settings">2 · Test settings <span class="cnt hidden" data-cnt="settings"></span></div>
+      <div class="stab" data-stab="scope">3 · Scope <span class="cnt hidden" data-cnt="scope"></span></div>
+      <div class="stab" data-stab="creds">4 · Credentials <span class="cnt hidden" data-cnt="creds"></span></div>
+      <div class="stab" data-stab="switches">5 · Tool switches <span class="cnt hidden" data-cnt="switches"></span></div>
+      <div class="stab" data-stab="scans">6 · Scans &amp; history</div>
+    </div>
+
+    <!-- 1. Overview -->
+    <div class="ppane" data-pane="overview">
+      <div class="panel">
+        <h2>Overview</h2>
+        <div class="lead">Who the client is and what is being tested. Work through the tabs left to right, then Save.</div>
+        <div class="fgroup"><label>Project name</label>
+          <input type="text" id="pName" placeholder="e.g. acme-billing-api"></div>
+        <div class="grid2">
+          <div class="fgroup"><label>Business context</label>
+            <textarea id="pBusiness" rows="6" placeholder="What the business does, revenue-critical flows, compliance regime (PCI DSS, SOC2, GDPR)…"></textarea></div>
+          <div class="fgroup"><label>System under test</label>
+            <textarea id="pSystem" rows="6" placeholder="Architecture, environments, frameworks, auth model, third-party integrations…"></textarea></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h2>At a glance</h2>
+        <div class="summary-grid" id="pSummary"></div>
+      </div>
+    </div>
+
+    <!-- 2. Test settings -->
+    <div class="ppane hidden" data-pane="settings">
+      <div class="panel">
+        <h2>Knowledge, position &amp; intensity</h2>
+        <div class="lead">These decide which endpoints and credentials are allowed (Scope / Credentials tabs) and what the switches default to.</div>
+        <div class="grid2">
+          <div class="fgroup"><label>Knowledge level (hat)</label>
+            <select class="field" id="pLevel">
+              <option value="black">Black hat (no knowledge)</option>
+              <option value="grey" selected>Grey hat (partial knowledge)</option>
+              <option value="white">White hat (full knowledge)</option>
+            </select></div>
+          <div class="fgroup"><label>Test position</label>
+            <select class="field" id="pPosition">
+              <option value="external" selected>External (from the internet)</option>
+              <option value="internal">Internal (inside the network / assumed breach)</option>
+              <option value="both">External + Internal</option>
+            </select></div>
+          <div class="fgroup"><label>Aggressiveness</label>
+            <select class="field" id="pAggr">
+              <option value="0">L0 — Passive recon only</option>
+              <option value="1">L1 — Non-intrusive</option>
+              <option value="2" selected>L2 — Standard</option>
+              <option value="3">L3 — Aggressive</option>
+              <option value="4">L4 — Very aggressive</option>
+              <option value="5">L5 — Destructive (NOT recommended)</option>
+            </select></div>
+          <div class="fgroup"><label>Start / maintenance window</label>
+            <input type="text" id="pWindow" placeholder="e.g. Fri 2026-01-09 18:00 – Sat 06:00 UTC"></div>
+        </div>
+        <div class="banner" id="pSettingsBanner"></div>
+        <div class="fgroup" id="pSourceGroup"><label>Source code path (White hat — enables Strix white-box analysis)</label>
+          <input type="text" id="pSource" placeholder="/path/to/checked-out/repo (optional)"></div>
+      </div>
+      <div class="panel">
+        <h2>Rules of engagement</h2>
+        <div class="fgroup"><label>Approach &amp; rules of engagement</label>
+          <textarea id="pApproach" rows="5" placeholder="e.g. OWASP WSTG v4.2 methodology; no social engineering; no DoS; exploit only to proof level; stop conditions…"></textarea></div>
+        <div class="fgroup"><label>Written authorisation reference (required before DoS or destructive testing can switch on)</label>
+          <input type="text" id="pAuth" placeholder="e.g. SOW-2026-014 §4.2 signed by J. Smith, 2026-01-05"></div>
+      </div>
+    </div>
+
+    <!-- 3. Scope -->
+    <div class="ppane hidden" data-pane="scope">
+      <div class="panel">
+        <h2>Endpoints in scope</h2>
+        <div class="banner" id="pHatBanner"></div>
+        <div class="listbox" id="pEndpoints"></div>
+      </div>
+      <div class="panel">
+        <h2>Out of scope — observed at every test level</h2>
+        <div class="lead">Dropped at the scan firewall under every hat, position and level.</div>
+        <div class="listbox" id="pOutOfScope"></div>
+      </div>
+    </div>
+
+    <!-- 4. Credentials -->
+    <div class="ppane hidden" data-pane="creds">
+      <div class="panel" id="pKeysafePanel">
+        <h2>Keysafe — test account logins</h2>
+        <div class="banner hidden" id="pKeysafeBanner"></div>
+        <div id="pKeysafe"></div>
+        <div class="empty">Passwords and API keys are stored server-side and shown masked; saving keeps the stored value unless you replace it. MFA seeds live only in the KeePassXC authenticator, never in this database.</div>
+      </div>
+    </div>
+
+    <!-- 5. Tool switches -->
+    <div class="ppane hidden" data-pane="switches">
+      <div class="panel">
+        <h2>Tool &amp; method switches — <span class="proj-sub" id="pSwPrec">switch &gt; aggression level &gt; hat level &gt; profile defaults</span></h2>
+        <div class="empty" style="margin:2px 0 6px">auto follows the level and hat; on/off overrides them. Out-of-scope blocking, Black hat's no-credentials rule and the authorisation requirement cannot be overridden.</div>
+        <div id="pSwWarn"></div>
+        <div class="tscroll" id="pSwitches"></div>
+      </div>
+    </div>
+
+    <!-- 6. Scans & history -->
+    <div class="ppane hidden" data-pane="scans">
+      <div class="panel">
+        <h2>Policy-enforced scans — <span class="proj-sub">run with <code>penenv scan --project NAME</code></span></h2>
+        <div id="projScans"><div class="empty">No policy-enforced scans for this project yet.</div></div>
+      </div>
+      <div class="panel">
+        <h2>Scan history — before / after</h2>
+        <div id="projHistory"><div class="empty">Runs matching this project's in-scope endpoints will appear here after each scan is ingested.</div></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= New scan tab ================= -->
+  <div id="tab-scan" class="hidden" data-toptab="scan">
+    <div class="panel">
+      <h2>Run a policy-enforced scan</h2>
+      <div class="lead">Pick a saved project and start the agent. The scan uses that project's exact
+        settings — hat, test position, aggressiveness, scope firewall, tool switches and logins.
+        Edit any of it on the <span class="linkish" id="scanGotoProject">Project</span> tab first.</div>
+      <div class="grid2">
+        <div class="fgroup"><label>Project</label>
+          <select class="field" id="scanProject"><option value="">— choose a saved project —</option></select></div>
+        <div class="fgroup"><label>&nbsp;</label>
+          <div class="proj-actions" style="margin:0">
+            <button id="scanDry" title="validate the policy and show the plan without touching the target">Dry-run check</button>
+            <button class="primary" id="scanStart" disabled>▶ Start scan</button>
+            <button class="danger hidden" id="scanStop">■ Stop</button>
+          </div></div>
+      </div>
+      <div class="banner" id="scanPlan">Choose a project to see its scan plan.</div>
+      <details id="scanAdvanced" style="margin-top:6px">
+        <summary class="proj-sub" style="cursor:pointer">Run options (optional)</summary>
+        <div class="scan-opts" style="margin-top:10px">
+          <div class="fgroup" style="margin:0"><label>Lower max-turns (never raises the level)</label>
+            <input type="text" id="scanTurns" placeholder="e.g. 30"></div>
+          <div class="fgroup" style="margin:0"><label>Max budget (USD)</label>
+            <input type="text" id="scanBudget" placeholder="e.g. 5"></div>
+          <div class="fgroup" style="margin:0"><label>Scan profile (optional)</label>
+            <input type="text" id="scanProfile" placeholder="profiles/<name>.md"></div>
+          <div class="fgroup" style="margin:0"><label class="sw"><input type="checkbox" id="scanKeep"> keep gateway/network after the scan (for inspection)</label></div>
+        </div>
+        <div class="fgroup" id="scanMfaGroup" style="margin:10px 0 0">
+          <label>KeePassXC authenticator master password (only if a login uses MFA — used for this run, written to a 0600 temp file and deleted at the end)</label>
+          <input type="password" id="scanKdbx" autocomplete="new-password" placeholder="leave blank unless this project has MFA logins"></div>
+      </details>
+    </div>
+
+    <div class="panel hidden" id="scanMonitorPanel">
+      <h2>Scan progress <span id="scanStateBadge"></span></h2>
+      <div class="proj-sub" id="scanMonitorMeta" style="margin:-4px 0 10px"></div>
+      <div class="scanlog" id="scanLog"></div>
+      <div id="scanDone" class="hidden" style="margin-top:10px"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Recent scan launches</h2>
+      <div id="scanLaunches"><div class="empty">No scans have been launched from here yet.</div></div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+const $=s=>document.querySelector(s), $$=s=>document.querySelectorAll(s);
+const MASK='********';
+let currentProject=null, state={filter:'active',q:'',findings:[],runs:[],summary:null,expanded:{}};
+
+/* In-page confirm: native confirm() is auto-dismissed (returns false) in automation-driven
+   browsers such as the Playwright window, which silently cancelled Start/Delete/Remove. */
+function askConfirm(msg,okLabel){
+  return new Promise(res=>{
+    const bg=document.createElement('div');bg.className='modal-bg';
+    bg.innerHTML=`<div class="modal" role="dialog" aria-modal="true"><div class="modal-msg"></div>
+      <div class="modal-btns"><button class="mcancel">Cancel</button><button class="primary mok"></button></div></div>`;
+    bg.querySelector('.modal-msg').textContent=msg;bg.querySelector('.mok').textContent=okLabel||'OK';
+    const done=v=>{bg.remove();document.removeEventListener('keydown',key);res(v);};
+    const key=e=>{if(e.key==='Escape')done(false);};
+    bg.querySelector('.mok').onclick=()=>done(true);bg.querySelector('.mcancel').onclick=()=>done(false);
+    bg.onclick=e=>{if(e.target===bg)done(false);};
+    document.addEventListener('keydown',key);document.body.appendChild(bg);bg.querySelector('.mok').focus();
+  });
+}
+function toast(msg,err){const t=$('#toast');t.textContent=msg;t.className=err?'err':'';t.style.display='block';
+  clearTimeout(t._h);t._h=setTimeout(()=>t.style.display='none',2600);}
+async function jget(u){const r=await fetch(u);if(!r.ok)throw new Error((await r.json().catch(()=>({}))).error||r.status);return r.json();}
+async function jpost(u,body,method='POST'){const r=await fetch(u,{method,headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})});
+  const d=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(d.error||r.status);e.data=d;throw e;}return d;}
+
+/* ---------- dashboard ---------- */
+const SEVS=['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
+function renderCards(s){
+  const sev=s.open_by_severity||{};
+  const total=SEVS.reduce((a,k)=>a+(sev[k]||0),0);
+  let h=`<div class="card total"><div class="n">${total}</div><div class="l">Open total</div></div>`;
+  for(const k of SEVS)h+=`<div class="card ${k}"><div class="n">${sev[k]||0}</div><div class="l">${k.toLowerCase()}</div></div>`;
+  h+=`<div class="card fixed"><div class="n">${(s.by_status||{}).fixed||0}</div><div class="l">Fixed</div></div>`;
+  $('#cards').innerHTML=h;
+}
+function renderBars(s){
+  const runs=(s.runs||[]).slice(-14);
+  const max=Math.max(1,...runs.map(r=>r.findings||0));
+  $('#bars').innerHTML=runs.map(r=>`<div class="bar"><span class="n">${r.findings||0}</span>
+    <div class="fill" style="height:${Math.round((r.findings||0)/max*100)}%"></div>
+    <span>${(r.name||r.dir||'').slice(0,18)}</span></div>`).join('');
+}
+function renderRuns(runs){
+  let h='<tr><th>Run</th><th>Started</th><th>Mode</th><th>Findings</th><th>Report</th></tr>';
+  for(const r of runs){
+    h+=`<tr><td>${esc(r.name||r.dir)}</td><td>${esc(r.started||'')}</td><td>${esc(r.mode||'')}</td>
+      <td>${r.findings_count??''}</td>
+      <td><span class="linkish" onclick="showReport('${r.dir}')">open</span></td></tr>`;
+  }
+  $('#runsTable').innerHTML=h||'<tr><td class="empty">No runs ingested yet.</td></tr>';
+}
+function sevBadge(s){return `<span class="badge ${s}">${s}</span>`;}
+function renderFindings(){
+  let rows=state.findings;
+  const q=state.q.trim().toLowerCase();
+  if(q){rows=rows.filter(r=>['title','target','endpoint','method','evidence']
+    .some(k=>String(r[k]||'').toLowerCase().includes(q)));}
+  let h='<tr><th>Sev</th><th>Status</th><th>Method</th><th>Endpoint</th><th>Title</th><th>Target</th><th>Set status</th></tr>';
+  for(const r of rows){
+    h+=`<tr class="fmain" data-id="${r.id}">
+      <td>${sevBadge(r.severity)}</td>
+      <td class="st-${r.status}">${r.status}</td>
+      <td class="method">${esc(r.method||'')}</td>
+      <td class="endpoint">${esc(r.endpoint||'')}</td>
+      <td>${esc(r.title)}</td><td>${esc(r.target||'')}</td>
+      <td><select class="status" data-id="${r.id}">
+        ${['open','fixed','accepted','false_positive'].map(s=>
+          `<option ${s===r.status?'selected':''}>${s}</option>`).join('')}
+      </select></td></tr>`;
+    if(state.expanded[r.id]){
+      h+=`<tr class="fdetail"><td colspan="7">
+        <div class="evidence">${esc(r.evidence||'(no evidence text)')}</div>
+        <div style="margin-top:6px;color:var(--dim);font-size:11px">last seen: ${esc(r.last_seen||'')} ·
+        ${r.last_run?`<span class="linkish" onclick="showFindingMd('${r.last_run}','${r.id}.md')">per-finding report</span>`:''}</div>
+      </td></tr>`;
+    }
+  }
+  $('#findTable').innerHTML=h||'<tr><td class="empty">No findings match this filter.</td></tr>';
+}
+window.showReport=async d=>{try{const t=await jget(`/api/run/${d}/report`);
+  const w=window.open('','_blank');w.document.write(`<pre style="white-space:pre-wrap;background:#0d1117;color:#e6edf3;padding:24px;font:13px/1.5 monospace">${esc(t)}</pre>`);}catch(e){toast(e.message,1);}};
+window.showFindingMd=async(d,f)=>{try{const t=await jget(`/api/run/${d}/vuln/${f}`);
+  const w=window.open('','_blank');w.document.write(`<pre style="white-space:pre-wrap;background:#0d1117;color:#e6edf3;padding:24px;font:13px/1.5 monospace">${esc(t)}</pre>`);}catch(e){toast(e.message,1);}};
+
+async function loadDashboard(){
+  const [s,f,rs]=await Promise.all([jget('/api/summary'),jget(`/api/findings?status=${state.filter}`),jget('/api/runs')]);
+  state.summary=s;state.findings=f;state.runs=rs;
+  renderCards(s);renderBars(s);renderRuns(rs);renderFindings();
+  const li=s.last_ingest?`last ingest ${s.last_ingest}`:'never ingested';
+  $('#meta').textContent=`${li} · ${s.targets?.length||0} target(s)`;
+}
+
+/* ---------- project page ---------- */
+let CATALOGUE=null, swResolved={}, swWarnings=[];
+const SW_GROUPS=[['HARD-binary','Sandbox binaries (cannot run when off)'],['HARD-tool','Strix agent tools (removed when off)'],
+  ['HARD-config','Strix configuration'],['SOFT-method','Methods (instruction-level, bounded by the network caps)'],['CONTRACT','Contract terms (recorded only)']];
+async function loadCatalogue(){if(!CATALOGUE){try{CATALOGUE=await jget('/api/policy/catalogue');}catch(e){CATALOGUE={switches:[]};}}return CATALOGUE;}
+function renderSwitches(cfg){
+  const st=(cfg&&cfg.switches)||{};
+  if(!CATALOGUE){loadCatalogue().then(()=>renderSwitches(cfg));return;}
+  let h='<table class="swgrid">';
+  for(const [g,title] of SW_GROUPS){
+    const rows=CATALOGUE.switches.filter(s=>g==='SOFT-method'?s.cls.startsWith('SOFT'):(g==='HARD-binary'?s.cls.startsWith('HARD-binary'):s.cls===g));
+    if(!rows.length)continue;
+    h+=`<tr class="grp"><td colspan="4">${esc(title)}</td></tr>`;
+    for(const s of rows){
+      const v=typeof st[s.id]==='string'?st[s.id]:'auto', r=swResolved[s.id];
+      const res=r?`<span class="${r.on?'res-on':'res-off'}">${r.on?'ON':'off'}</span> <span class="proj-sub">${esc(r.why)}</span>`:'';
+      h+=`<tr class="${r&&r.source==='invariant'?'forced':''}"><td>${esc(s.label)}${s.needs_auth?' <span class="proj-sub">(needs authorisation)</span>':''}</td>
+        <td class="cls">${esc(s.cls)}</td>
+        <td><select data-sw="${s.id}" title="auto: ${escAttr(s.auto)}">${['auto','on','off'].map(o=>`<option ${o===v?'selected':''}>${o}</option>`).join('')}</select></td>
+        <td>${res}</td></tr>`;
+    }
+  }
+  $('#pSwitches').innerHTML=h+'</table>';
+  $$('#pSwitches select[data-sw]').forEach(sel=>sel.onchange=()=>{updateProjTabs();scheduleValidate();});
+  $('#pSwWarn').innerHTML=swWarnings.map(w=>`<div class="swwarn">⚠ ${esc(w)}</div>`).join('');
+  updateProjTabs();
+}
+/* ---- typed scope lists (Point 1) — server (scope.py) is authoritative; these mirror its format rules ---- */
+const TYPES=[['ip','IP Address'],['hostname','Hostname'],['url','URL'],['cidr','CIDR']];
+const TYPE_HINT={ip:'203.0.113.10 or 2001:db8::10',hostname:'app.example.com',url:'https://app.example.com/login',cidr:'203.0.113.0/24'};
+const LISTNAME={in_scope:'In scope',out_of_scope:'Out of scope'};
+let model={in_scope:[],out_of_scope:[],creds:[]}, serverIssues=[], addType={in_scope:'url',out_of_scope:'url'};
+function v4(s){const p=s.split('.');return p.length===4&&p.every(x=>/^(0|[1-9]\d{0,2})$/.test(x)&&+x<=255);}
+function v6(s){if(!s.includes(':')||/[^0-9a-fA-F:.]/.test(s))return null;try{return new URL('http://['+s+']').hostname.slice(1,-1);}catch{return null;}}
+function host(s){s=s.replace(/\.$/,'');if(!s||s.length>253)return false;const l=s.split('.');
+  if(l.every(x=>/^\d+$/.test(x)))return false;return l.every(x=>/^(?!-)[a-z0-9-]{1,63}(?<!-)$/i.test(x));}
+function checkFormat(t,d){
+  if(!d)return 'value is empty';
+  if(/\s/.test(d))return 'value must not contain spaces';
+  if(t==='ip'){if(d.includes('/'))return 'looks like a CIDR range — choose type CIDR';return v4(d)||v6(d)?null:'not a valid IPv4 or IPv6 address';}
+  if(t==='cidr'){const m=d.split('/');if(m.length!==2)return 'CIDR needs a prefix length, e.g. 203.0.113.0/24';
+    const max=v4(m[0])?32:(v6(m[0])?128:-1);if(max<0)return 'not a valid IPv4 or IPv6 CIDR range';
+    return /^\d{1,3}$/.test(m[1])&&+m[1]<=max?null:'prefix length must be 0–'+max;}
+  if(t==='hostname'){if(d.includes('/'))return 'looks like a URL — choose type URL';if(v4(d)||v6(d))return 'this is an IP address — choose type IP Address';
+    return host(d)?null:'not a valid hostname (letters, digits, hyphens; dot-separated labels)';}
+  if(t==='url'){let u;try{u=new URL(d);}catch{return 'URL must look like https://host/path';}
+    if(!/^https?:$/.test(u.protocol))return 'URL must start with http:// or https://';
+    if(u.username||u.password)return 'URL must not embed credentials — put them in the keysafe';
+    const h=u.hostname.replace(/^\[|\]$/g,'');if(!(v4(h)||v6(h)||host(h)))return 'URL host is not a valid hostname or IP';return null;}
+  return 'choose a type';
+}
+function normKey(t,d){
+  if(t==='ip')return 'ip:'+(v6(d)||d);
+  if(t==='cidr'){const [a,p]=d.split('/');const ip=v6(a)||a;if((v4(a)&&+p===32)||(v6(a)&&+p===128))return 'ip:'+ip;return 'cidr:'+ip+'/'+p;}
+  if(t==='hostname')return 'host:'+d.toLowerCase().replace(/\.$/,'');
+  try{const u=new URL(d);return 'url:'+u.protocol+'//'+u.host.toLowerCase()+u.pathname.replace(/\/+$/,'')+u.search;}catch{return 'raw:'+d;}
+}
+function localIssues(){
+  const out=[],seen={};
+  for(const ln of ['in_scope','out_of_scope'])model[ln].forEach((e,i)=>{
+    const r=e.type?checkFormat(e.type,e.data):'legacy entry — choose its type';
+    if(r){out.push({severity:'error',list:ln,index:i,message:r});return;}
+    const k=normKey(e.type,e.data);
+    if(seen[k]){const [ol,oi]=seen[k];out.push({severity:'error',list:ln,index:i,
+      message:e.data+' — '+(ol!==ln?'already listed in '+LISTNAME[ol]:'duplicate of row '+(oi+1))});}
+    else seen[k]=[ln,i];
+  });
+  return out;
+}
+function allIssues(){
+  const loc=localIssues(), key=i=>i.list+'|'+i.index+'|'+i.message;
+  const have=new Set(loc.map(key));
+  // server issues for rows that still pass local checks (internet-facing, DNS, credential rules)
+  const locRows=new Set(loc.map(i=>i.list+'|'+i.index));
+  return loc.concat(serverIssues.filter(i=>!have.has(key(i))&&!(i.severity==='error'&&locRows.has(i.list+'|'+i.index)&&i.list!=='keysafe')));
+}
+function issuesFor(ln,i){return allIssues().filter(x=>x.list===ln&&x.index===i);}
+function typeSelect(cur,cls){return `<select class="${cls}">${(cur?[]:[['','— type —']]).concat(TYPES).map(([v,l])=>`<option value="${v}" ${v===cur?'selected':''}>${l}</option>`).join('')}</select>`;}
+function renderScope(ln){
+  const el=ln==='in_scope'?$('#pEndpoints'):$('#pOutOfScope');
+  el.innerHTML=model[ln].map((e,i)=>{
+    const iss=issuesFor(ln,i),sev=iss.some(x=>x.severity==='error')?'err':(iss.length?'warn':'');
+    return `<div class="scoperow ${sev}" data-i="${i}">${typeSelect(e.type,'t')}
+      <input class="d" value="${escAttr(e.data)}" placeholder="${escAttr(TYPE_HINT[e.type]||'')}">
+      <button class="rm" title="remove">✕</button>
+      ${iss.map(x=>`<div class="rowmsg ${x.severity==='error'?'err':'warn'}">${esc(x.message)}</div>`).join('')}</div>`;
+  }).join('')+`<div class="scoperow addline">${typeSelect(addType[ln],'t-add')}
+      <input class="d-add" placeholder="add ${escAttr(TYPE_HINT[addType[ln]])}…"><button class="add" title="add">＋</button>
+      <div class="rowmsg err addmsg hidden"></div></div>`;
+  el.querySelectorAll('.scoperow[data-i]').forEach(row=>{
+    const i=+row.dataset.i, e=model[ln][i];
+    row.querySelector('.t').onchange=ev=>{e.type=ev.target.value;e.data='';rerenderScope();scheduleValidate();};   // type change clears data
+    row.querySelector('.d').onchange=ev=>{e.data=ev.target.value.trim();rerenderScope();scheduleValidate();};
+    row.querySelector('.rm').onclick=()=>{model[ln].splice(i,1);serverIssues=[];rerenderScope();scheduleValidate();};
+  });
+  const tAdd=el.querySelector('.t-add'), dAdd=el.querySelector('.d-add'), msg=el.querySelector('.addmsg');
+  tAdd.onchange=()=>{addType[ln]=tAdd.value;dAdd.value='';dAdd.placeholder='add '+TYPE_HINT[tAdd.value]+'…';msg.classList.add('hidden');}; // clears data
+  const add=()=>{
+    const d=dAdd.value.trim(), t=tAdd.value, r=checkFormat(t,d);
+    const fail=m=>{msg.textContent=m;msg.classList.remove('hidden');};
+    if(r)return fail(r);
+    const k=normKey(t,d);
+    for(const l2 of ['in_scope','out_of_scope']){const j=model[l2].findIndex(x=>x.type&&!checkFormat(x.type,x.data)&&normKey(x.type,x.data)===k);
+      if(j>=0)return fail(l2===ln?`duplicate of row ${j+1}`:`already listed in ${LISTNAME[l2]} (row ${j+1})`);}
+    model[ln].push({type:t,data:d});rerenderScope();scheduleValidate();
+    const nxt=(ln==='in_scope'?$('#pEndpoints'):$('#pOutOfScope')).querySelector('.d-add');nxt&&nxt.focus();
+  };
+  el.querySelector('.add').onclick=add;
+  dAdd.onkeydown=ev=>{if(ev.key==='Enter'){ev.preventDefault();add();}};
+}
+function rerenderScope(){renderScope('in_scope');renderScope('out_of_scope');renderKeysafe();updateProjTabs();}
+
+/* ---- project sub-tabs: one topic per tab, with problem counts so nothing hides on an unopened tab ---- */
+const TAB_OF_LIST={in_scope:'scope',out_of_scope:'scope',keysafe:'creds'};
+function tabOfIssue(i){return TAB_OF_LIST[i.list]||'settings';}
+function showSubtab(name){
+  if(!document.querySelector(`.stab[data-stab="${name}"]`))name='overview';
+  $$('.stab').forEach(t=>t.classList.toggle('active',t.dataset.stab===name));
+  $$('.ppane').forEach(p=>p.classList.toggle('hidden',p.dataset.pane!==name));
+  try{localStorage.setItem('penenv.projTab',name);}catch(e){}
+}
+$$('.stab').forEach(t=>t.onclick=()=>showSubtab(t.dataset.stab));
+function setBadge(name,n,cls){const b=document.querySelector(`.cnt[data-cnt="${name}"]`);if(!b)return;
+  b.textContent=n;b.title=n+(cls==='err'?' error(s)':' warning(s)');b.className='cnt '+cls+(n?'':' hidden');}
+function updateProjTabs(){
+  const iss=allIssues(), by={};
+  for(const i of iss){const t=tabOfIssue(i);by[t]=by[t]||{e:0,w:0};by[t][i.severity==='error'?'e':'w']++;}
+  for(const t of ['scope','creds','settings']){const c=by[t]||{e:0,w:0};setBadge(t,c.e||c.w,c.e?'err':'warn');}
+  setBadge('switches',swWarnings.length,'warn');
+  const sb=$('#pSettingsBanner'), own=iss.filter(i=>tabOfIssue(i)==='settings');
+  sb.innerHTML=esc(HAT_TEXT[$('#pLevel').value]+' '+POS_TEXT[$('#pPosition').value])
+    +own.map(i=>`<div class="rowmsg ${i.severity==='error'?'err':'warn'}">${esc(i.message)}</div>`).join('');
+  sb.classList.toggle('warn',!!own.length);
+  renderSummary(iss);
+}
+function renderSummary(iss){
+  const el=$('#pSummary'), hat=$('#pLevel').value, pos=$('#pPosition').value, lvl=$('#pAggr');
+  const [lvShort,lvName]=lvl.options[lvl.selectedIndex].text.split(' — ');
+  const ovr=Object.values(collectProject().config.switches||{}).filter(v=>v&&v!=='auto').length;
+  const errs=iss.filter(i=>i.severity==='error').length, warns=iss.length-errs;
+  const first=iss.find(i=>i.severity==='error')||iss[0];
+  const card=(n,l,tab,cls)=>`<div class="card${cls?' '+cls:''}" style="cursor:pointer" title="open ${tab}" data-go="${tab}"><div class="n">${esc(n)}</div><div class="l">${esc(l)}</div></div>`;
+  el.innerHTML=card(hat[0].toUpperCase()+hat.slice(1)+' hat','knowledge level','settings')
+    +card({external:'External',internal:'Internal',both:'External + Internal'}[pos],'test position','settings')
+    +card(lvShort+' '+(lvName||''),'aggressiveness','settings')
+    +card(model.in_scope.length+' in · '+model.out_of_scope.length+' out','endpoints','scope')
+    +card(hat==='black'?'none (Black hat)':String(model.creds.length),'logins','creds')
+    +card(String(ovr),'switch overrides','switches')
+    +card(errs?errs+' error(s)':(warns?warns+' warning(s)':'none'),'problems',first?tabOfIssue(first):'overview',errs?'CRITICAL':(warns?'MEDIUM':'fixed'));
+  el.querySelectorAll('[data-go]').forEach(c=>c.onclick=()=>showSubtab(c.dataset.go));
+}
+$('#pName').oninput=()=>{$('#pCurName').textContent=$('#pName').value.trim()||'new project';};
+$('#pNew').onclick=()=>{projectForm({config:{}});showSubtab('overview');$('#pName').focus();};
+
+/* ---- keysafe: one field per login parameter (Point 2) ---- */
+const CRED_FIELDS=[['label','Label','e.g. tenant admin'],['role','Role','admin / standard user / API client'],
+  ['login_url','Login URL','https://app.example.com/login'],['domain','Domain / tenant','optional, e.g. ACME or tenant-id'],
+  ['username','Username','user@example.com'],['password','Password',''],['api_key','API key / token','optional']];
+const SECRET=new Set(['password','api_key']);
+function renderKeysafe(){
+  const el=$('#pKeysafe'), black=$('#pLevel').value==='black';
+  $('#pKeysafePanel').classList.toggle('disabled-panel',black);
+  $('#pKeysafePanel').inert=black;   // also blocks keyboard focus, not just the mouse
+  const b=$('#pKeysafeBanner');b.classList.toggle('hidden',!black);
+  b.innerHTML='Black hat: no credentials are used. Switch to Grey or White hat to add logins.';
+  const head=`<div class="cred-head" style="margin:0"><span class="proj-sub">${model.creds.length} login(s)</span>
+    <span><button class="revealbtn" title="fetch real passwords/keys (audited)" ${black?'disabled':''}>👁 reveal</button>
+    <button class="addcred" ${black?'disabled':''}>＋ add login</button></span></div>`;
+  el.innerHTML=head+model.creds.map((c,i)=>{
+    const iss=issuesFor('keysafe',i),bad=iss.some(x=>x.severity==='error');
+    const f=([k,l,ph])=>{const sec=SECRET.has(k),masked=sec&&c[k]===MASK;
+      const inp=`<input data-f="${k}" ${sec?'type="password" autocomplete="new-password"':'type="text"'} class="${masked?'masked':''}" value="${escAttr(c[k]||'')}" placeholder="${escAttr(ph)}">`;
+      const errs=iss.filter(x=>x.field===k).map(x=>`<div class="rowmsg ${x.severity==='error'?'err':'warn'}">${esc(x.message)}</div>`).join('');
+      return `<div class="${k==='login_url'?'full':''}"><label>${l}</label>${sec?`<div class="pw">${inp}<button class="peek" data-f="${k}" title="show/hide">👁</button></div>`:inp}${errs}</div>`;};
+    return `<div class="cred ${bad?'err':''}" data-i="${i}">
+      <div class="cred-head"><b>${esc(c.label||'login '+(i+1))}</b><button class="rm danger" title="remove login">✕ remove</button></div>
+      <div class="cred-grid">${CRED_FIELDS.map(f).join('')}
+        <div class="full"><label>MFA (KeePassXC authenticator)</label><div class="otp">
+          ${c.otp_ref?`<span class="proj-sub">linked: ${esc(c.otp_ref)}</span><button class="otpcode">get code</button><code class="otpout hidden"></code>`
+            :'<span class="proj-sub">no MFA registered</span>'}
+          <button class="otpreg">${c.otp_ref?'re-register':'register MFA…'}</button>
+          ${c.otp_ref?'<button class="otpunlink">unlink</button>':''}</div>
+          ${iss.filter(x=>x.field==='otp_ref'||x.field==='username'&&!CRED_FIELDS.length).map(x=>`<div class="rowmsg err">${esc(x.message)}</div>`).join('')}</div>
+        <div class="full"><label>Notes</label><input data-f="notes" type="text" value="${escAttr(c.notes||'')}" placeholder="where used, lockout policy, expiry…"></div>
+        ${iss.filter(x=>!['label','role','login_url','domain','username','password','api_key','notes'].includes(x.field)||x.index==null).map(x=>`<div class="rowmsg ${x.severity==='error'?'err':'warn'} full">${esc(x.message)}</div>`).join('')}
+      </div></div>`;}).join('')
+    +allIssues().filter(x=>x.list==='keysafe'&&x.index==null).map(x=>`<div class="rowmsg err">${esc(x.message)}</div>`).join('');
+  el.querySelectorAll('.cred').forEach(card=>{
+    const i=+card.dataset.i,c=model.creds[i];
+    card.querySelectorAll('input[data-f]').forEach(inp=>inp.onchange=()=>{c[inp.dataset.f]=inp.value;if(inp.dataset.f==='label')renderKeysafe();scheduleValidate();});
+    card.querySelectorAll('.peek').forEach(b=>b.onclick=()=>{const inp=card.querySelector(`input[data-f="${b.dataset.f}"]`);inp.type=inp.type==='password'?'text':'password';});
+    card.querySelector('.rm').onclick=async()=>{if(!await askConfirm('Remove login "'+(c.label||c.username||i+1)+'"?','Remove'))return;model.creds.splice(i,1);serverIssues=[];renderKeysafe();scheduleValidate();};
+    const reg=card.querySelector('.otpreg');if(reg)reg.onclick=()=>mfaRegister(c);
+    const gc=card.querySelector('.otpcode');if(gc)gc.onclick=()=>mfaCode(c,card.querySelector('.otpout'));
+    const ul=card.querySelector('.otpunlink');if(ul)ul.onclick=async()=>{if(await askConfirm('Unlink MFA from this login? (the KeePassXC entry is kept)','Unlink')){c.otp_ref='';renderKeysafe();}};
+  });
+  el.querySelector('.addcred').onclick=()=>{model.creds.push({id:'',label:'',login_url:'',username:'',password:'',domain:'',api_key:'',otp_ref:'',role:'',notes:''});renderKeysafe();};
+  el.querySelector('.revealbtn').onclick=async()=>{
+    if(!currentProject||!currentProject.id){toast('save the project first',1);return;}
+    try{const d=await jget('/api/projects/'+currentProject.id+'?reveal=1');
+      const byId=Object.fromEntries(((d.config||{}).keysafe||[]).map(c=>[c.id,c]));
+      model.creds.forEach(c=>{const s=byId[c.id];if(s)for(const k of SECRET)if(c[k]===MASK)c[k]=s[k];});
+      renderKeysafe();el.querySelectorAll('input[type=password]').forEach(i=>i.type='text');
+      toast('secrets revealed (access recorded)');}catch(e){toast(e.message,1);}
+  };
+}
+
+/* ---- hat level (Point 3) ---- */
+const HAT_TEXT={
+  white:'White hat: full knowledge — every credential is used, plus source code for white-box analysis if a path is set.',
+  grey:'Grey hat: partial knowledge — credentials allowed (each must name an in-scope login URL), no white-box analysis.',
+  black:'Black hat: no knowledge — no credentials, no white-box analysis.'};
+const POS_TEXT={
+  external:'External position: in-scope endpoints must be internet-facing (public IPs/ranges, URLs/hostnames that resolve publicly).',
+  internal:'Internal position: in-scope endpoints must be internal (private IPs/ranges, internal hostnames, URLs on private hosts).',
+  both:'External + Internal position: internet-facing and internal endpoints are both allowed.'};
+let prevHat='grey';
+function applyHat(){
+  const h=$('#pLevel').value, pos=$('#pPosition').value;
+  const b=$('#pHatBanner');
+  b.textContent=HAT_TEXT[h]+' '+POS_TEXT[pos]+' Out-of-scope entries are always excluded, whatever the settings.';
+  b.classList.toggle('warn',h!=='white'||pos!=='both');
+  $('#pSourceGroup').classList.toggle('hidden',h!=='white');
+  renderKeysafe();updateProjTabs();
+}
+$('#pLevel').onchange=async()=>{
+  const h=$('#pLevel').value;
+  if(h==='black'&&model.creds.length){
+    if(!await askConfirm(`Black hat tests carry no credentials.\n\nRemove the ${model.creds.length} login(s) from this project? (Cancel keeps ${prevHat} hat.)`,'Remove logins')){
+      $('#pLevel').value=prevHat;return;}
+    model.creds=[];
+  }
+  prevHat=h;serverIssues=[];applyHat();scheduleValidate();
+};
+
+$('#pPosition').onchange=()=>{serverIssues=[];applyHat();scheduleValidate();};
+$('#pAggr').onchange=()=>{updateProjTabs();scheduleValidate();};
+$('#pAuth').oninput=()=>scheduleValidate();
+$('#pSource').oninput=()=>scheduleValidate();
+
+/* ---- server validation (authoritative: internet-facing, DNS, credential association) ---- */
+let vTimer=null,vSeq=0;
+function scheduleValidate(){clearTimeout(vTimer);vTimer=setTimeout(runValidate,350);}
+async function runValidate(){
+  const seq=++vSeq;
+  try{const d=await jpost('/api/projects/validate',{config:collectProject().config});
+    if(seq!==vSeq)return;serverIssues=d.issues||[];rerenderScope();
+    if(d.policy){swResolved=d.policy.switches||{};swWarnings=d.policy.warnings||[];renderSwitches(collectProject().config);}
+  }catch(e){/* offline: local checks still shown */}
+}
+
+/* ---- MFA via KeePassXC (Point 2: register / recover one-time codes) ---- */
+async function askKdbxPassword(){
+  const pw=prompt('KeePassXC authenticator master password\n(used for this operation only — never stored)');
+  return pw||null;
+}
+async function mfaRegister(c){
+  if(!currentProject||!currentProject.id||!c.id)return toast('save the project (and this login) first',1);
+  const uri=prompt('Paste the MFA setup secret from the site\'s authenticator setup (base32 key, or otpauth:// URI from the QR code):');
+  if(!uri)return;
+  const pw=await askKdbxPassword();if(!pw)return;
+  try{const d=await jpost(`/api/projects/${currentProject.id}/mfa/register`,{cred_id:c.id,secret:uri.trim(),kdbx_password:pw});
+    c.otp_ref=d.otp_ref;renderKeysafe();
+    toast(`MFA registered in KeePassXC — current code ${d.code} (enter it on the site to confirm setup)`);
+  }catch(e){toast(e.message,1);}
+}
+async function mfaCode(c,out){
+  const pw=await askKdbxPassword();if(!pw)return;
+  try{const d=await jpost(`/api/projects/${currentProject.id}/mfa/code`,{cred_id:c.id,kdbx_password:pw});
+    out.textContent=d.code+'  ('+d.remaining+'s)';out.classList.remove('hidden');
+    navigator.clipboard&&navigator.clipboard.writeText(d.code).catch(()=>{});
+    toast('one-time code copied (access recorded)');
+    setTimeout(()=>out.classList.add('hidden'),d.remaining*1000);
+  }catch(e){toast(e.message,1);}
+}
+
+function projectForm(p){
+  currentProject=p;
+  const c=p.config||{};
+  $('#pName').value=p.name||'';
+  $('#pBusiness').value=c.business||'';
+  $('#pSystem').value=c.system||'';
+  model={in_scope:(c.endpoints||[]).map(e=>typeof e==='string'?{type:'',data:e}:{type:e.type||'',data:e.data||''}),
+         out_of_scope:(c.out_of_scope||[]).map(e=>typeof e==='string'?{type:'',data:e}:{type:e.type||'',data:e.data||''}),
+         creds:(c.keysafe||[]).map(x=>({...x}))};
+  serverIssues=p.issues||[];
+  $('#pLevel').value=c.hat||'grey';prevHat=$('#pLevel').value;
+  $('#pPosition').value=c.position||(($('#pLevel').value==='white')?'both':'external');
+  $('#pAggr').value=String(c.aggression??2);
+  $('#pSource').value=c.source_path||'';
+  $('#pApproach').value=c.approach||'';
+  $('#pWindow').value=c.window||'';
+  $('#pAuth').value=c.authorisation||'';
+  swResolved={};swWarnings=[];
+  renderSwitches(c);scheduleValidate();
+  applyHat();rerenderScope();
+  $('#pCurName').textContent=p.name||'new project';
+  $('#pSaveState').textContent=p.id?('#'+p.id+' · updated '+(p.updated_at||'')):'not saved yet';
+  $('#pDelete').disabled=!p.id;
+  loadProjectHistory(p.id);loadProjectScans(p.id);
+}
+function collectProject(){
+  const sw={};
+  $$('#pSwitches select[data-sw]').forEach(i=>sw[i.dataset.sw]=i.value);
+  for(const [k,v] of Object.entries(((currentProject&&currentProject.config)||{}).switches||{}))if(!(k in sw))sw[k]=v;
+  const cfg={
+    ...((currentProject&&currentProject.config)||{}),
+    business:$('#pBusiness').value.trim(),
+    system:$('#pSystem').value.trim(),
+    endpoints:model.in_scope.map(e=>({type:e.type,data:e.data})),
+    out_of_scope:model.out_of_scope.map(e=>({type:e.type,data:e.data})),
+    keysafe:model.creds.map(c=>({...c})),
+    hat:$('#pLevel').value,
+    position:$('#pPosition').value,
+    aggression:+$('#pAggr').value,
+    source_path:$('#pSource').value.trim(),
+    approach:$('#pApproach').value.trim(),
+    window:$('#pWindow').value.trim(),
+    switches:sw,
+    authorisation:$('#pAuth').value.trim(),
+  };
+  return {name:$('#pName').value.trim(),config:cfg};
+}
+async function loadProjectList(selId){
+  const d=await jget('/api/projects');
+  let h='';
+  for(const p of d.projects){
+    h+=`<div class="proj-list-item" data-id="${p.id}">
+      <span>${esc(p.name)}</span>
+      <span class="proj-sub">${esc(p.hat||'')} hat · L${p.aggression??'?'} · ${p.endpoints_count} endpoint(s) · ${p.keysafe_count} login(s)</span></div>`;
+  }
+  $('#projChips').innerHTML=h||'<span class="empty">No projects yet — fill the form and Save to create one.</span>';
+  $$('#projChips .proj-list-item').forEach(el=>el.onclick=async()=>{
+    try{projectForm(await jget('/api/projects/'+el.dataset.id));$('#pPicker').open=false;}catch(e){toast(e.message,1);}});
+  if(selId){const el=document.querySelector(`#projChips .proj-list-item[data-id="${selId}"]`);if(el)el.click();}
+}
+$('#pSave').onclick=async()=>{
+  const body=collectProject();
+  if(!body.name)return toast('Project name required',1);
+  const loc=localIssues().filter(i=>i.severity==='error');
+  if(loc.length){rerenderScope();showSubtab('scope');return toast(loc.length+' scope problem(s) — fix the red rows on the Scope tab first',1);}
+  try{
+    if(currentProject&&currentProject.id){
+      await jpost('/api/projects/'+currentProject.id,body);
+      await loadProjectList(currentProject.id);
+      toast('Project saved');
+    }else{
+      const d=await jpost('/api/projects',body);
+      await loadProjectList(d.id);
+      toast('Project created');
+    }
+    $('#pSaveState').textContent='saved '+new Date().toLocaleTimeString();
+  }catch(e){
+    if(e.data&&e.data.issues){serverIssues=e.data.issues;rerenderScope();
+      const f=serverIssues.find(i=>i.severity==='error');if(f)showSubtab(tabOfIssue(f));}
+    toast(e.message,1);
+  }
+};
+$('#pDelete').onclick=async()=>{
+  if(!currentProject||!currentProject.id)return;
+  if(!await askConfirm('Delete project "'+currentProject.name+'"?','Delete'))return;
+  try{await jpost('/api/projects/'+currentProject.id,{},'DELETE');
+    currentProject=null;$('#pDelete').disabled=true;
+    await loadProjectList();projectForm({config:{}});
+    $('#pSaveState').textContent='deleted';
+    toast('Project deleted');
+  }catch(e){toast(e.message,1);}
+};
+function deltaLine(label,arr,cls){
+  if(!arr||!arr.length)return '';
+  const items=arr.slice(0,6).map(x=>`<li>${sevBadge(x.severity||'?')} ${esc(x.title||'')}</li>`).join('')
+    +(arr.length>6?`<li class="empty">…and ${arr.length-6} more</li>`:'');
+  return `<div style="margin:6px 0"><span class="${cls}">${label} (${arr.length})</span><ul style="margin:4px 0 0 16px;padding:0;font-size:11px">${items}</ul></div>`;
+}
+async function loadProjectScans(pid){
+  const box=$('#projScans');
+  if(!pid){box.innerHTML='<div class="empty">Save the project first.</div>';return;}
+  try{
+    const d=await jget(`/api/projects/${pid}/scans`);
+    if(!d.scans.length){box.innerHTML='<div class="empty">No policy-enforced scans for this project yet.</div>';return;}
+    const repHdr=`<div class="proj-sub" style="margin:0 0 4px">Build a formatted pen-test report (cover, executive summary, findings by severity &amp; type, code and corrections) from this project's most recent scan:</div>`
+      +reportBlock('/api/projects/'+pid+'/report','Generate pen-test report (latest scan)');
+    box.innerHTML=repHdr+d.scans.map(sc=>{
+      const pol=sc.policy||{}, ev=sc.events||[];
+      const denied=ev.filter(e=>e.kind==='policy_denied');
+      const cnt=ev.find(e=>e.kind==='gateway_counters');let c={};try{c=JSON.parse(cnt?cnt.detail:'{}');}catch(e){}
+      const end=ev.find(e=>e.kind==='end'), err=ev.filter(e=>e.kind==='error');
+      return `<details style="border:1px solid var(--border);border-radius:6px;padding:8px 12px;margin:8px 0">
+        <summary><b>${esc(sc.run_label||'scan '+sc.scan_id)}</b> <span class="proj-sub">${esc(sc.created_at||'')} → ${esc(sc.ended_at||'running')}
+          · L${pol.level??'?'} ${esc(pol.hat||'')} hat · ${esc(pol.mode||'')}</span>
+          · <span class="${denied.length?'delta-up':''}">${denied.length} denied command(s)</span>
+          · gateway drops: out-of-scope <b>${c['out-of-scope']||0}</b>, not-in-scope <b>${c['not-in-scope']||0}</b>, rate-capped <b>${c['conn-cap']||0}</b></summary>
+        <div class="proj-sub" style="margin:6px 0">targets: ${esc((pol.targets||[]).join(', '))} · switches on: ${esc((pol.switches_on||[]).join(', '))}</div>
+        ${end?`<div class="proj-sub">${esc(end.detail)}</div>`:''}
+        ${err.map(e=>`<div class="rowmsg err">${esc(e.detail)}</div>`).join('')}
+        ${denied.length?'<div style="margin-top:6px"><b>Denied invocations</b></div>'+denied.map(e=>`<div class="evrow">${esc(e.at)}  ${esc(e.detail)}</div>`).join(''):''}
+      </details>`;}).join('');
+    wireReportBlocks(box);
+  }catch(e){box.innerHTML='<div class="empty">could not load scans: '+esc(e.message)+'</div>';}
+}
+async function loadProjectHistory(pid){
+  const box=$('#projHistory');
+  if(!pid){box.innerHTML='<div class="empty">Save the project to link its in-scope endpoints to scan history.</div>';return;}
+  try{
+    const d=await jget(`/api/projects/${pid}/history`);
+    if(!d.runs.length){box.innerHTML='<div class="empty">No ingested runs match this project\'s in-scope endpoints yet.</div>';return;}
+    let h=`<div class="empty">scope: ${d.scope.map(esc).join(' · ')}</div>`;
+    d.runs.forEach((r,i)=>{
+      const prev=d.runs[i+1];
+      let delta='';
+      if(prev){
+        const dn=r.total-prev.total;
+        delta=`<span class="${dn>0?'delta-up':(dn<0?'delta-down':'')}">${dn>0?'▲':(dn<0?'▼':'=')} ${dn>=0?'+':''}${dn} vs previous</span>`;
+      }
+      h+=`<div style="border:1px solid var(--border);border-radius:6px;padding:10px 12px;margin:8px 0">
+        <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;align-items:baseline">
+          <b>${esc(r.name||r.dir)}</b>
+          <span class="proj-sub">${esc(r.started||'')} · ${esc(r.mode||'')} ·
+            <span class="linkish" onclick="showReport('${r.dir}')">source report</span></span>
+        </div>
+        <div style="margin:6px 0">${SEVS.map(s=>r.severity[s]?`${sevBadge(s)} ${r.severity[s]}`:null).filter(Boolean).join(' ')}
+          &nbsp; total <b>${r.total}</b> &nbsp; ${delta}</div>
+        ${deltaLine('NEW',r.new,'delta-up')}
+        ${deltaLine('FIXED since previous',r.fixed,'delta-down')}
+        ${reportBlock('/api/run/'+r.dir+'/report','Generate pen-test report')}
+      </div>`;
+    });
+    box.innerHTML=h; wireReportBlocks(box);
+  }catch(e){box.innerHTML=`<div class="empty">history error: ${esc(e.message)}</div>`;}
+}
+
+/* ---------- new-scan tab: launch the agent and watch it to completion ---------- */
+let scanMon={lid:null,offset:0,timer:null}, scanPlanCache=null;
+function stateBadge(v){
+  if(v.running)return `<span class="runstate running"><span class="spin"></span>running</span>`;
+  if(v.status==='unknown')return `<span class="runstate stopped">ended (unknown exit)</span>`;
+  const rc=v.exit_code;
+  const cls=rc===0?'clean':(rc===2?'found':((typeof rc==='number'&&rc<0)?'stopped':'error'));
+  return `<span class="runstate ${cls}">${esc(v.exit_meaning||'ended')} (exit ${rc})</span>`;
+}
+async function scanTabShown(){await Promise.all([loadScanProjects(),loadLaunches()]);}
+async function loadScanProjects(){
+  try{
+    const d=await jget('/api/projects');
+    const sel=$('#scanProject'), keep=sel.value;
+    sel.innerHTML='<option value="">— choose a saved project —</option>'+
+      d.projects.map(p=>`<option value="${p.id}">${esc(p.name)} · ${esc(p.hat||'')} hat · L${p.aggression??'?'}</option>`).join('');
+    if(keep&&d.projects.some(p=>String(p.id)===keep))sel.value=keep;
+  }catch(e){toast(e.message,1);}
+}
+async function renderScanPlan(pid){
+  const box=$('#scanPlan');
+  $('#scanStart').disabled=true;
+  if(!pid){box.className='banner';box.textContent='Choose a project to see its scan plan.';scanPlanCache=null;return;}
+  try{
+    const p=await jget('/api/projects/'+pid);
+    const cfg=p.config||{};
+    scanPlanCache={id:pid,cfg};
+    box.className='banner';box.innerHTML='<span class="spin"></span>checking the exact scan plan…';
+    const [v,pf]=await Promise.all([jpost('/api/projects/validate',{config:cfg}),jget('/api/projects/'+pid+'/preflight')]);
+    if($('#scanProject').value!==String(pid))return;   // user switched project meanwhile
+    const seen=new Set();
+    const errs=[...(v.issues||[]).filter(i=>i.severity==='error').map(i=>i.message),...(pf.errors||[])]
+      .filter(m=>{const k=m.toLowerCase().slice(0,60);if(seen.has(k))return false;seen.add(k);return true;});
+    const on=((v.policy||{}).switches)?Object.entries(v.policy.switches).filter(([,r])=>r.on).map(([k])=>k):[];
+    const hat=cfg.hat||'grey', pos=cfg.position||'external', lvl=cfg.aggression??2;
+    const ins=(cfg.endpoints||[]).length, outs=(cfg.out_of_scope||[]).length;
+    const creds=hat==='black'?0:(cfg.keysafe||[]).length;
+    const mfa=hat!=='black'&&(cfg.keysafe||[]).some(c=>c&&c.otp_ref);
+    $('#scanMfaGroup').classList.toggle('hidden',!mfa);
+    box.className='banner'+(errs.length?' warn':'');
+    box.innerHTML=
+      `<b>L${lvl}</b> · <b>${esc(hat)}</b> hat · <b>${esc({external:'External',internal:'Internal',both:'External + Internal'}[pos]||pos)}</b> position`
+      +` · ${ins} in-scope / ${outs} out-of-scope · ${creds} login(s)${mfa?' <b>(MFA)</b>':''}`
+      +`<div class="proj-sub" style="margin-top:6px">tools on: ${esc(on.join(', ')||'(level defaults)')}</div>`
+      +(pf.warnings||[]).map(w=>`<div class="rowmsg warn">${esc(w)}</div>`).join('')
+      +(errs.length
+        ? errs.map(m=>`<div class="rowmsg err">${esc(m)}</div>`).join('')
+          +`<div class="rowmsg err">Fix these on the Project tab before a real scan. A dry-run check still works.</div>`
+        : '<div class="proj-sub" style="margin-top:4px;color:var(--green)">✓ the scan plan accepts this project — ready to start the pen test agent</div>')
+      +(pf.plan?`<details style="margin-top:6px"><summary class="proj-sub" style="cursor:pointer">show the exact plan the agent will run</summary><div class="scanlog" style="max-height:260px">${esc(pf.plan)}</div></details>`:'');
+    $('#scanStart').disabled=errs.length>0;
+  }catch(e){box.className='banner warn';box.textContent='could not load plan: '+e.message;}
+}
+async function startScan(dryRun){
+  const pid=$('#scanProject').value;
+  if(!pid)return toast('choose a project first',1);
+  const name=$('#scanProject').selectedOptions[0].textContent.split(' · ')[0];
+  if(!dryRun&&!await askConfirm(`Start a REAL policy-enforced pen test of "${name}"?\n\nThe agent will actively test the in-scope targets using exactly this project's saved settings.`,'▶ Start pen test'))return;
+  const turns=parseInt($('#scanTurns').value,10);
+  const body={dry_run:dryRun,
+    max_turns:Number.isFinite(turns)&&turns>0?turns:undefined,
+    max_budget:$('#scanBudget').value.trim()||undefined,
+    profile:$('#scanProfile').value.trim()||undefined,
+    keep:$('#scanKeep').checked,
+    kdbx_password:$('#scanKdbx').value||undefined};
+  const btns=[$('#scanStart'),$('#scanDry')];btns.forEach(b=>b.disabled=true);
+  try{
+    const d=await jpost('/api/projects/'+pid+'/launch',body);
+    $('#scanKdbx').value='';
+    toast(dryRun?'dry-run started':'scan started');
+    beginMonitor(d.id);
+    loadLaunches();
+  }catch(e){
+    toast('scan not started: '+e.message,1);
+    const box=$('#scanPlan');box.className='banner warn';
+    box.innerHTML=`<div class="rowmsg err"><b>Scan not started:</b> ${esc(e.message)}</div>`;
+    btns.forEach(b=>b.disabled=false);return;
+  }finally{btns.forEach(b=>b.disabled=false);}
+  renderScanPlan(pid);
+}
+function beginMonitor(lid){
+  if(scanMon.timer)clearTimeout(scanMon.timer);
+  scanMon={lid,offset:0,timer:null};
+  $('#scanMonitorPanel').classList.remove('hidden');
+  $('#scanLog').textContent='';
+  $('#scanDone').classList.add('hidden');$('#scanDone').innerHTML='';
+  $('#scanStateBadge').innerHTML='';
+  $('#scanMonitorMeta').textContent='';
+  pollMonitor();
+}
+async function pollMonitor(){
+  const lid=scanMon.lid;if(!lid)return;
+  try{
+    const v=await jget(`/api/launches/${lid}?offset=${scanMon.offset}`);
+    if(scanMon.lid!==lid)return;
+    if(v.log){const el=$('#scanLog');const atBottom=el.scrollTop+el.clientHeight>=el.scrollHeight-20;
+      el.textContent+=v.log;if(atBottom)el.scrollTop=el.scrollHeight;scanMon.offset=v.offset;}
+    $('#scanStateBadge').innerHTML=stateBadge(v);
+    $('#scanMonitorMeta').textContent=`${v.project_name} · ${v.dry_run?'dry-run':'scan'} · penenv ${v.argv} · started ${v.started_at}`;
+    $('#scanStop').classList.toggle('hidden',!v.running||v.dry_run);
+    if(v.running){scanMon.timer=setTimeout(pollMonitor,1500);}
+    else{
+      $('#scanStop').classList.add('hidden');
+      const done=$('#scanDone');done.classList.remove('hidden');
+      const link=v.dry_run?'':` <span class="linkish" id="scanSeeResults">See findings & scan record on the Project tab →</span>`;
+      const rep=v.dry_run?'':reportBlock('/api/projects/'+v.project_id+'/report','Generate pen-test report');
+      done.innerHTML=`<div>${v.dry_run?'Dry-run finished — the plan above shows what a real scan would do.':'Scan finished and results were ingested into the tracker.'}${link}</div>${rep}`;
+      wireReportBlocks(done);
+      const see=$('#scanSeeResults');if(see)see.onclick=async()=>{
+        $$('.tab').forEach(x=>x.classList.remove('active'));document.querySelector('.tab[data-tab="proj"]').classList.add('active');
+        $$('[data-toptab]').forEach(sec=>sec.classList.toggle('hidden',sec.dataset.toptab!=='proj'));
+        try{projectForm(await jget('/api/projects/'+v.project_id));showSubtab('scans');}catch(e){}
+      };
+      if(!v.dry_run){loadDashboard().catch(()=>{});}
+      loadLaunches();
+    }
+  }catch(e){
+    $('#scanStateBadge').innerHTML=`<span class="runstate error">monitor error</span>`;
+    $('#scanMonitorMeta').textContent=e.message;
+  }
+}
+/* ---- formatted pen-test report (HTML / PDF / Word) ---- */
+function reportBlock(url,label){
+  // url is the POST endpoint that builds the report (by project id or run dir)
+  return `<div class="repblock" data-rep-url="${esc(url)}">
+    <button class="rep-gen">📄 ${esc(label||'Generate report')}</button>
+    <span class="rep-status"></span></div>`;
+}
+function wireReportBlocks(root){
+  (root||document).querySelectorAll('.repblock').forEach(bl=>{
+    if(bl.dataset.wired)return; bl.dataset.wired='1';
+    const btn=bl.querySelector('.rep-gen'), st=bl.querySelector('.rep-status');
+    btn.onclick=async()=>{
+      btn.disabled=true; st.innerHTML='<span class="spin"></span> building report — PDF and Word take a few seconds…';
+      try{
+        const d=await jpost(bl.dataset.repUrl,{formats:['html','pdf','docx']});
+        const f=d.files||{}, L=[];
+        if(f.html)L.push(`<a href="${f.html}" target="_blank" rel="noopener">🌐 Open HTML</a>`);
+        if(f.pdf)L.push(`<a href="${f.pdf}" download>📕 Download PDF</a>`);
+        if(f.docx)L.push(`<a href="${f.docx}" download>📘 Download Word</a>`);
+        const c=d.model?d.model.counts:{}, tot=d.model?d.model.total:0;
+        const sevtxt=['CRITICAL','HIGH','MEDIUM','LOW','INFO'].filter(s=>c[s]).map(s=>c[s]+' '+s[0]).join(' / ');
+        st.innerHTML=`<span style="color:var(--green)">✓ ${tot} findings${sevtxt?' ('+sevtxt+')':''}</span>`;
+        bl.insertAdjacentHTML('beforeend',' '+L.join(' '));
+        btn.textContent='↻ Rebuild';
+      }catch(e){st.innerHTML=`<span style="color:var(--red)">report failed: ${esc(e.message)}</span>`;}
+      finally{btn.disabled=false;}
+    };
+  });
+}
+
+async function loadLaunches(){
+  const box=$('#scanLaunches');
+  try{
+    const d=await jget('/api/launches');
+    if(!d.launches.length){box.innerHTML='<div class="empty">No scans have been launched from here yet.</div>';return;}
+    box.innerHTML=d.launches.map(v=>`<div class="launch-item" data-lid="${v.id}">
+      <span>${esc(v.project_name||'?')} <span class="proj-sub">· ${v.dry_run?'dry-run':'scan'} · ${esc(v.started_at||'')}</span></span>
+      ${stateBadge(v)}</div>`).join('');
+    box.querySelectorAll('.launch-item').forEach(el=>el.onclick=()=>beginMonitor(el.dataset.lid));
+  }catch(e){box.innerHTML='<div class="empty">could not load launches: '+esc(e.message)+'</div>';}
+}
+$('#scanProject').onchange=()=>renderScanPlan($('#scanProject').value);
+$('#scanStart').onclick=()=>startScan(false);
+$('#scanDry').onclick=()=>startScan(true);
+$('#scanStop').onclick=async()=>{if(scanMon.lid&&await askConfirm('Stop this running scan?','Stop scan')){try{await jpost('/api/launches/'+scanMon.lid+'/stop',{});toast('stopping…');}catch(e){toast(e.message,1);}}};
+$('#scanGotoProject').onclick=()=>document.querySelector('.tab[data-tab="proj"]').click();
+
+/* ---------- wiring ---------- */
+function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function escAttr(s){return esc(s).replace(/\n/g,' ');}
+$$('.tab').forEach(t=>t.onclick=()=>{
+  $$('.tab').forEach(x=>x.classList.remove('active'));t.classList.add('active');
+  const want=t.dataset.tab;
+  $$('[data-toptab]').forEach(sec=>sec.classList.toggle('hidden',sec.dataset.toptab!==want));
+  if(want==='scan')scanTabShown();
+});
+$('#filterChips').addEventListener('click',e=>{
+  const c=e.target.closest('.chip');if(!c)return;
+  $$('#filterChips .chip').forEach(x=>x.classList.remove('active'));c.classList.add('active');
+  state.filter=c.dataset.f;loadDashboard().catch(e2=>toast(e2.message,1));
+});
+$('#search').addEventListener('input',()=>{state.q=$('#search').value;renderFindings();});
+$('#findTable').addEventListener('click',e=>{
+  if(e.target.closest('select')||e.target.closest('.linkish'))return;
+  const tr=e.target.closest('tr.fmain');if(!tr)return;
+  const id=tr.dataset.id;state.expanded[id]=!state.expanded[id];renderFindings();
+});
+$('#findTable').addEventListener('change',e=>{
+  const sel=e.target.closest('select.status');if(!sel)return;
+  const id=sel.dataset.id,status=sel.value;
+  jpost(`/api/findings/${id}/status`,{status})
+    .then(()=>{toast('status → '+status);loadDashboard().catch(()=>{});})
+    .catch(err=>toast(err.message,1));
+});
+$('#ingestBtn').onclick=async()=>{
+  const b=$('#ingestBtn');b.disabled=true;b.textContent='Ingesting…';
+  try{const d=await jpost('/api/ingest');
+    toast(`ingested: ${d.added||0} new, ${d.updated||0} updated`);
+    await Promise.all([loadDashboard(),currentProject&&currentProject.id?loadProjectHistory(currentProject.id):Promise.resolve()]);
+  }catch(e){toast(e.message,1);}
+  b.disabled=false;b.textContent='Re-ingest runs';
+};
+loadDashboard().catch(e=>{ $('#meta').textContent='error: '+e.message; });
+loadProjectList().catch(()=>{});
+projectForm({config:{}});
+showSubtab((()=>{try{return localStorage.getItem('penenv.projTab')||'overview';}catch(e){return 'overview';}})());
+</script>
+</body>
+</html>

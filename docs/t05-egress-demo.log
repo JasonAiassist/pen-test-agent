@@ -1,0 +1,46 @@
+
+### gateway
+penenv-egress-gw ready inner=eth0
+
+### sandbox before route (expect: no egress at all)
+000
+curl failed (fail-closed)
+
+### allowlisted target 172.20.0.2:3000 (expect 200)
+200
+
+### allowlisted host, other port 22 (expect fail)
+rc=28
+
+### decoy 172.20.0.3:80 via curl (expect fail)
+rc=28
+
+### decoy via nmap -sS -Pn (expect filtered)
+Host is up.
+22/tcp  filtered ssh
+80/tcp  filtered http
+443/tcp filtered https
+
+### internet 1.1.1.1:443 (expect fail)
+rc=28
+
+### host via internal bridge 172.31.250.1:22 (expect fail)
+rc=7
+
+### agent tampering as root: flush own netns, re-add direct route to decoy subnet
+rc=28
+
+### host -> sandbox control channel via gateway-published port (expect 200)
+host->sandbox via 127.0.0.1:32794 200
+
+### DNS from sandbox (expect no external resolution)
+no external DNS
+
+### gateway counters
+		ip daddr @deny4 counter packets 9 bytes 444 drop
+		ct status dnat iifname != "eth0" oifname "eth0" counter packets 1 bytes 60 accept
+		ip saddr 172.31.250.0/24 ip daddr . tcp dport @allow4 counter packets 1 bytes 60 accept
+		counter packets 17 bytes 1183 drop
+
+### decoy packet capture (expect 0 packets)
+0

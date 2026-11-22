@@ -1,0 +1,50 @@
+# Code-only repository: never commit scan output, reports, or local state.
+
+# Scan output and audit trails (contain live attack details)
+strix_runs/
+scan_audit/
+runs/
+reports/
+
+# Tracker database, backups and logs (contain saved login details)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+tracker/backups/
+*.log
+!docs/*-demo.log
+
+# Secrets and local config
+.env
+*.env
+*.kdbx
+*.pem
+*.key
+*.p12
+secrets/
+
+# LibreOffice / report scratch
+.~lock.*#
+lu*.tmp
+.lo-prof/
+*__word.html
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Runtime / backup copies
+*.pid
+*.bak-*
+*.bak
