@@ -4,6 +4,10 @@ Agent-driven penetration testing of your **own** SaaS applications using
 [Strix](https://github.com/usestrix/strix) in its Docker sandbox, with a local
 vulnerability tracker (dashboard, lifecycle, trends).
 
+**Installing?** This repo is the harness only; Strix (`strix-agent` 1.7.x) and its sandbox
+image are installed separately. Step-by-step setup (written for AI agents, also usable by
+humans): [`AGENT_README.md`](AGENT_README.md).
+
 ```
 penenv/
 ├── bin/penenv              # CLI wrapper (strix, demo targets, tracker)
