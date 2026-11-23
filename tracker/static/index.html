@@ -505,8 +505,8 @@ select.field,input,textarea{max-width:100%}
         <div class="fgroup"><label>Provider</label>
           <select class="field" id="agActProvider"></select></div>
         <div class="fgroup"><label>Model</label>
-          <input type="text" id="agActModel" list="agModelList" placeholder="choose or type a model id">
-          <datalist id="agModelList"></datalist>
+          <select class="field" id="agModelPick" title="every model the provider reported"></select>
+          <input type="text" id="agActModel" placeholder="…or type a model id">
           <div class="proj-actions"><button id="agFetch" title="ask the provider which models it offers">Fetch models</button>
             <span class="proj-sub" id="agFetchMsg"></span></div></div>
         <div class="fgroup"><label>Reasoning effort</label>
@@ -1343,7 +1343,7 @@ function agActProviderChanged(){
   const p=AG.providers.find(x=>x.id===$('#agActProvider').value);
   const sd=AG.strix_default;
   $('#agActModel').disabled=!p;$('#agFetch').disabled=!p;$('#agEffort').disabled=!p;
-  $('#agModelList').innerHTML=(p?.models||[]).map(m=>`<option value="${escAttr(m)}">`).join('');
+  agFillModels(p?.models||[]);
   if(p){$('#agFetchMsg').textContent=(p.models||[]).length?`${p.models.length} known model(s)`:'';return;}
   // Strix default: show what Strix's own config uses (read-only)
   $('#agActModel').value=sd.model||'';
@@ -1365,6 +1365,17 @@ function agKindChanged(){
   $('#agKey').placeholder=k.needs_key?'paste the key':'not needed';
 }
 $('#agKind').onchange=agKindChanged;
+// Full model dropdown (a <datalist> would filter suggestions by the text already typed).
+function agFillModels(models){
+  const sel=$('#agModelPick'),cur=$('#agActModel').value.trim();
+  sel.innerHTML=`<option value="">${models.length?`— ${models.length} model(s) —`:'— no model list; fetch or type below —'}</option>`+
+    models.map(m=>`<option value="${escAttr(m)}">${esc(m)}</option>`).join('');
+  sel.disabled=!models.length||$('#agActModel').disabled;
+  sel.value=models.includes(cur)?cur:'';
+}
+$('#agModelPick').onchange=()=>{if($('#agModelPick').value)$('#agActModel').value=$('#agModelPick').value;};
+$('#agActModel').oninput=()=>{const v=$('#agActModel').value.trim(),sel=$('#agModelPick');
+  sel.value=[...sel.options].some(o=>o.value===v)?v:'';};
 $('#agActProvider').onchange=()=>{$('#agActModel').value='';agActProviderChanged();};
 $('#agProvTable').addEventListener('click',e=>{const a=e.target.closest('[data-agedit]');if(a)agForm(a.dataset.agedit);
   if(e.target.closest('[data-agimport]'))$('#agImport').click();});
@@ -1394,8 +1405,8 @@ $('#agFetch').onclick=async()=>{
   $('#agFetchMsg').textContent='asking the provider…';
   try{const r=await jpost(`/api/agent/providers/${encodeURIComponent(id)}/models`,{});
     const p=AG.providers.find(x=>x.id===id);if(p)p.models=r.models;
-    $('#agModelList').innerHTML=r.models.map(m=>`<option value="${escAttr(m)}">`).join('');
-    $('#agFetchMsg').textContent=r.ok?`${r.models.length} model(s) available — pick one in the Model box`:r.error;}
+    agFillModels(r.models);
+    $('#agFetchMsg').textContent=r.ok?`${r.models.length} model(s) available — pick one from the Model list`:r.error;}
   catch(e){$('#agFetchMsg').textContent=e.message;}
   b.disabled=false;
 };
