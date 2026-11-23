@@ -165,6 +165,13 @@ td,th{white-space:nowrap}
 #findTable td:nth-child(4),#findTable td:nth-child(5){white-space:normal;min-width:180px}
 tr.fdetail td{white-space:normal}
 .swgrid td:last-child{white-space:normal}
+/* Tool switches: fixed column shares so the name column wraps instead of crowding out the
+   switch + status; status gets ~2x its previous share */
+.swgrid{table-layout:fixed}
+.swgrid col.c-name{width:47%}.swgrid col.c-cls{width:12%}.swgrid col.c-sel{width:78px}.swgrid col.c-res{width:auto}
+.swgrid td:first-child{white-space:normal;overflow-wrap:anywhere}
+.swgrid td.cls{overflow:hidden;text-overflow:ellipsis}
+.swgrid tr.grp td{white-space:normal}
 /* project sub-tabs */
 .projbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:space-between}
 .projbar .cur{font-size:14px}
@@ -588,7 +595,7 @@ async function loadCatalogue(){if(!CATALOGUE){try{CATALOGUE=await jget('/api/pol
 function renderSwitches(cfg){
   const st=(cfg&&cfg.switches)||{};
   if(!CATALOGUE){loadCatalogue().then(()=>renderSwitches(cfg));return;}
-  let h='<table class="swgrid">';
+  let h='<table class="swgrid"><colgroup><col class="c-name"><col class="c-cls"><col class="c-sel"><col class="c-res"></colgroup>';
   for(const [g,title] of SW_GROUPS){
     const rows=CATALOGUE.switches.filter(s=>g==='SOFT-method'?s.cls.startsWith('SOFT'):(g==='HARD-binary'?s.cls.startsWith('HARD-binary'):s.cls===g));
     if(!rows.length)continue;
