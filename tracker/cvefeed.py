@@ -37,6 +37,7 @@ import sqlite3
 import time
 import urllib.error
 import urllib.parse
+import sys
 import urllib.request
 from pathlib import Path
 
@@ -55,6 +56,50 @@ SOURCE_HOSTS = {
 }
 SEV_ORDER = {"NONE": 0, "INFO": 0, "LOW": 1, "MEDIUM": 2, "HIGH": 3, "CRITICAL": 4}
 USER_AGENT = "penenv-cvefeed/1.0 (host-side; offline curation)"
+# Optional NVD API key (raises NVD's rate limit). Looked up from $NVD_API_KEY, else from
+# the key file below (written 0600 by `penenv cve key set`). The value is never printed,
+# logged, stored in the CVE database, or passed into the scan sandbox.
+NVD_KEY_FILE = Path(os.environ["PENENV_NVD_KEY_FILE"]) if os.environ.get("PENENV_NVD_KEY_FILE") \
+    else Path.home() / ".config" / "penenv" / "nvd-api-key"
+
+
+def nvd_api_key() -> str:
+    env = (os.environ.get("NVD_API_KEY") or "").strip()
+    if env:
+        return env
+    try:
+        return NVD_KEY_FILE.read_text().strip()
+    except OSError:
+        return ""
+
+
+def nvd_key_source() -> str:
+    """Where the key comes from — for status output; never the value itself."""
+    if (os.environ.get("NVD_API_KEY") or "").strip():
+        return "configured ($NVD_API_KEY)"
+    if nvd_api_key():
+        return f"configured ({NVD_KEY_FILE})"
+    return "not configured (anonymous NVD rate limit)"
+
+
+def set_nvd_key(value: str) -> Path:
+    value = (value or "").strip()
+    if not value or any(c.isspace() for c in value):
+        raise ValueError("NVD API key must be a single non-empty token")
+    NVD_KEY_FILE.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    fd = os.open(NVD_KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(value + "\n")
+    os.chmod(NVD_KEY_FILE, 0o600)
+    return NVD_KEY_FILE
+
+
+def clear_nvd_key() -> bool:
+    try:
+        NVD_KEY_FILE.unlink()
+        return True
+    except FileNotFoundError:
+        return False
 
 
 # ----------------------------------------------------------------- store
@@ -496,8 +541,9 @@ def _as_json(data):
     return data
 
 
-def http_get(url: str, timeout: int = 60) -> bytes:
-    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+def http_get(url: str, timeout: int = 60, headers: dict | None = None) -> bytes:
+    req = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json",
+                                               **(headers or {})})
     with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310 (explicit https host allowlist below)
         return r.read()
 
@@ -519,8 +565,11 @@ def osv_query_url() -> str:
     return "https://api.osv.dev/v1/query"
 
 
-def sync_nvd(con, http=http_get, since_days=None, keyword=None) -> dict:
-    raw = http(nvd_url(since_days=since_days, keyword=keyword))
+def sync_nvd(con, http=http_get, since_days=None, keyword=None, api_key: str | None = None) -> dict:
+    """api_key None = look it up (env / key file); "" = force anonymous."""
+    key = nvd_api_key() if api_key is None else api_key
+    url = nvd_url(since_days=since_days, keyword=keyword)
+    raw = http(url, headers={"apiKey": key}) if key else http(url)
     recs = parse_nvd(raw)
     rep = upsert(con, recs)
     _set_meta(con, "nvd", len(recs))
@@ -577,7 +626,7 @@ def status(con) -> dict:
     feeds = {r["source"]: {"last_sync": r["last_sync"], "count": r["count"]}
              for r in con.execute("SELECT * FROM feed_meta")}
     return {"total": total, "kev": kev, "exploited": exploited, "feeds": feeds,
-            "db": str(DB_PATH)}
+            "db": str(DB_PATH), "nvd_api_key": nvd_key_source()}
 
 
 # ------------------------------------------------------------------- CLI
@@ -598,7 +647,25 @@ def main(argv=None) -> int:
     mp.add_argument("--limit", type=int, default=25)
     shp = sub.add_parser("show", help="print one stored CVE as JSON")
     shp.add_argument("cve_id")
+    kp = sub.add_parser("key", help="manage the optional NVD API key (never printed)")
+    kp.add_argument("action", choices=("set", "clear", "status"))
     args = ap.parse_args(argv)
+
+    if args.cmd == "key":
+        if args.action == "status":
+            print(f"[cve] NVD API key: {nvd_key_source()}")
+        elif args.action == "clear":
+            print("[cve] NVD API key file removed" if clear_nvd_key() else "[cve] no NVD API key file to remove")
+        else:
+            import getpass
+            value = getpass.getpass("NVD API key (input hidden): ") if sys.stdin.isatty() else sys.stdin.readline()
+            try:
+                path = set_nvd_key(value)
+            except ValueError as e:
+                print(f"[cve] {e}")
+                return 1
+            print(f"[cve] NVD API key saved to {path} (mode 0600)")
+        return 0
 
     con = connect()
     try:

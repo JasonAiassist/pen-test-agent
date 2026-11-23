@@ -202,7 +202,7 @@ class TestSyncWithFakeHTTP(unittest.TestCase):
                 return EXPLOITDB_CSV.encode()
             raise AssertionError(f"unexpected host: {url}")
 
-        cvefeed.sync_nvd(con, http=fake_http, since_days=7)
+        cvefeed.sync_nvd(con, http=fake_http, since_days=7, api_key="")
         cvefeed.sync_osv(con, http=fake_http, package="qs", ecosystem="npm")
         cvefeed.sync_kev(con, http=fake_http)
         cvefeed.sync_exploitdb(con, http=fake_http)
@@ -218,6 +218,55 @@ class TestSyncWithFakeHTTP(unittest.TestCase):
         url = cvefeed.nvd_url(since_days=3, keyword="openssh")
         self.assertIn("lastModStartDate", url)
         self.assertIn("keywordSearch=openssh", url)
+
+
+class TestNvdApiKey(unittest.TestCase):
+    """The optional NVD key is sent as the apiKey header, stored 0600, and never shown."""
+
+    def setUp(self):
+        import os
+        self.os = os
+        self.saved = (cvefeed.NVD_KEY_FILE, os.environ.pop("NVD_API_KEY", None))
+        cvefeed.NVD_KEY_FILE = Path(tempfile.mkdtemp()) / "cfg" / "nvd-api-key"
+
+    def tearDown(self):
+        cvefeed.NVD_KEY_FILE = self.saved[0]
+        if self.saved[1] is not None:
+            self.os.environ["NVD_API_KEY"] = self.saved[1]
+        else:
+            self.os.environ.pop("NVD_API_KEY", None)
+
+    def capture(self):
+        seen = {}
+
+        def http(url, headers=None, **kw):
+            seen["headers"] = headers
+            return json.dumps({"vulnerabilities": []}).encode()
+        return seen, http
+
+    def test_anonymous_when_unset(self):
+        seen, http = self.capture()
+        cvefeed.sync_nvd(mem_db(), http=http)
+        self.assertIsNone(seen["headers"])
+        self.assertIn("not configured", cvefeed.status(mem_db())["nvd_api_key"])
+
+    def test_key_file_is_0600_sent_as_header_and_never_in_status(self):
+        path = cvefeed.set_nvd_key("abc123-secret")
+        self.assertEqual(path.stat().st_mode & 0o777, 0o600)
+        seen, http = self.capture()
+        cvefeed.sync_nvd(mem_db(), http=http)
+        self.assertEqual(seen["headers"], {"apiKey": "abc123-secret"})
+        self.assertNotIn("abc123-secret", json.dumps(cvefeed.status(mem_db())))
+        self.assertTrue(cvefeed.clear_nvd_key())
+        self.assertEqual(cvefeed.nvd_api_key(), "")
+
+    def test_env_var_wins_and_bad_key_rejected(self):
+        cvefeed.set_nvd_key("from-file")
+        self.os.environ["NVD_API_KEY"] = "from-env"
+        self.assertEqual(cvefeed.nvd_api_key(), "from-env")
+        self.assertIn("$NVD_API_KEY", cvefeed.nvd_key_source())
+        with self.assertRaises(ValueError):
+            cvefeed.set_nvd_key("has space")
 
 
 if __name__ == "__main__":

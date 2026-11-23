@@ -25,7 +25,7 @@ Every tool named here exists in `sandbox-inventory.md` or in Strix's `_BASE_TOOL
 4. `research` mode is refused unless the project carries an authorisation reference. Lab/internal,
    non-destructive research accepts a lightweight self-authorisation (any non-empty reference); but
    research against **external** targets, or combined with **destructive/DoS**, requires a *structured*
-   authorisation record (`authorisations/<ref>.json`) that is unexpired, permits research (and
+   authorisation record (tracker DB, filled in on the dashboard's Authorisations tab) that is active, unexpired, permits research (and
    destructive, if used), and whose scope covers every in-scope target. Enforced fail-closed in
    `build_policy` via `tracker/authorisation.py`. See `docs/research-mode.md`.
 

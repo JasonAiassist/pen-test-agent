@@ -381,6 +381,7 @@ def run(args) -> int:
         launch.chmod(0o600)
         env = {k: v for k, v in os.environ.items() if k not in ("PERPLEXITY_API_KEY", "EXA_API_KEY")
                or p["switches"]["web_search"]["on"]}
+        env.pop("NVD_API_KEY", None)  # host-side CVE feed credential; never handed to the agent
         env.update(p["strix"]["env"], STRIX_DOCKER_SANDBOX_NETWORK=net, PENENV_LAUNCH=str(launch),
                    STRIX_RUN_TYPE="penenv")
         fds = ()

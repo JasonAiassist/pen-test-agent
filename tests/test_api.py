@@ -141,5 +141,50 @@ class TestApi(unittest.TestCase):
             self.assertEqual(r.status, 200)
 
 
+
+class TestAuthorisationApi(unittest.TestCase):
+    """Dashboard Authorisations tab: create / validate / update / revoke over HTTP."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.s = helpers.LiveServer()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.s.stop()
+
+    REC = {"ref": "API-ACME-01", "client": "Acme", "contract_ref": "SOW-9", "authorised_by": "J. Smith",
+           "expires": "2099-01-31", "research_allowed": True, "destructive_allowed": False,
+           "scope": [{"data": "https://shop.acme-corp.co.uk"}], "notes": "window Fri"}
+
+    def test_lifecycle(self):
+        st, d = self.s.call("POST", "/api/authorisations", self.REC)
+        self.assertEqual(st, 200, d)
+        aid = d["id"]
+        self.assertEqual((d["state"], d["scope"][0]["type"]), ("active", "url"))
+        st, d = self.s.call("POST", "/api/authorisations", self.REC)
+        self.assertEqual(st, 409, d)
+        st, d = self.s.call("POST", f"/api/authorisations/{aid}", {**self.REC, "expires": "2020-01-01"})
+        self.assertEqual((st, d["state"]), (200, "expired"))
+        st, d = self.s.call("GET", "/api/authorisations")
+        self.assertIn("API-ACME-01", [r["ref"] for r in d["authorisations"]])
+        st, d = self.s.call("POST", f"/api/authorisations/{aid}/revoke", {"reason": "test"})
+        self.assertEqual((st, d["state"]), (200, "revoked"))
+        st, d = self.s.call("POST", f"/api/authorisations/{aid}", self.REC)
+        self.assertEqual(st, 400)
+        st, d = self.s.call("GET", f"/api/authorisations/{aid}")
+        self.assertEqual([a["action"] for a in d["audit"]], ["create", "update", "revoke"])
+
+    def test_invalid_record_lists_every_problem(self):
+        st, d = self.s.call("POST", "/api/authorisations", {"ref": "", "research_allowed": True})
+        self.assertEqual(st, 400)
+        self.assertGreaterEqual(len(d["problems"]), 4)
+
+    def test_unknown_ids_are_404(self):
+        for method, path in (("GET", "/api/authorisations/999999"), ("GET", "/api/authorisations/abc"),
+                             ("POST", "/api/authorisations/999999/revoke")):
+            st, _ = self.s.call(method, path, {} if method == "POST" else None)
+            self.assertEqual(st, 404, path)
+
 if __name__ == "__main__":
     unittest.main()

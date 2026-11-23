@@ -18,7 +18,7 @@ lives in `tracker/authorisation.py` and is enforced in `policy.build_policy`:
 | Engagement | What is required |
 |---|---|
 | Lab / internal only, non-destructive (every in-scope target internal; no destructive/DoS) | A **self-authorisation**: any non-empty value in the project's `authorisation` field. |
-| **External** targets, or research combined with **destructive/DoS** | A **structured authorisation record** `authorisations/<ref>.json` that is unexpired, sets `research_allowed: true` (and `destructive_allowed: true` if destructive/DoS is used), and whose `scope` covers every in-scope target. A free-text reference alone is refused. |
+| **External** targets, or research combined with **destructive/DoS** | A **structured authorisation record** (dashboard → **Authorisations** tab) that is active (not revoked), unexpired, sets `research_allowed: true` (and `destructive_allowed: true` if destructive/DoS is used), and whose `scope` covers every in-scope target. A free-text reference alone is refused. |
 
 If the gate refuses, research mode is forced **off** and the reason is reported as a plan
 error — the scan either runs without research or is corrected first. Nothing is silently
@@ -26,15 +26,30 @@ downgraded.
 
 ## The authorisation record
 
-Copy `docs/authorisation-example.json` to `authorisations/<ref>.json` (that directory is
-git-ignored, so real client contracts never enter the repository) and set the project's
-`authorisation` field to `<ref>`. Fields:
+Records live in the tracker database (`authorisations` table, git-ignored with the rest of
+`*.db`, so real client contracts never enter the repository). Fill them in on the
+dashboard's **Authorisations** tab, then set the project's authorisation reference (Project →
+Settings → *Rules of engagement*) to the record's reference — the field suggests active
+records and says whether the value is linked to a record or is only a free-text
+self-authorisation. Fields:
 
-- `ref`, `client`, `contract_ref`, `authorised_by` — provenance of the sign-off.
+- `ref` — the reference projects link to (letters, digits, `. _ / -`).
+- `client`, `contract_ref`, `authorised_by` — provenance of the sign-off. Client and
+  signatory are always required; the contract/SOW reference **and** an expiry date are
+  required whenever research or destructive testing is permitted.
 - `expires` — `YYYY-MM-DD`; a past or unparseable date is treated as expired.
-- `research_allowed`, `destructive_allowed` — explicit permissions (default `false`).
-- `scope` — endpoint values (`"https://app.example.com"`) or `{type,data}` entries,
-  including CIDRs; every in-scope target must be covered.
+- `research_allowed`, `destructive_allowed` — explicit permissions (default off).
+- `scope` — one URL, hostname, IP or CIDR per line; every in-scope target must be covered
+  (an IP inside a scope CIDR counts as covered).
+- `notes` — window, emergency contact, exclusions.
+
+Records are never deleted. **Revoke** a record when a contract ends or is withdrawn: any
+project that names it is then refused research mode outright, even for lab work. Every
+create, update and revoke is written to `authorisation_audit` and shown under the form.
+A revoked record cannot be edited — create a new one.
+
+The same operations are available over the local API (`GET/POST /api/authorisations`,
+`GET/POST /api/authorisations/<id>`, `POST /api/authorisations/<id>/revoke`).
 
 ## Running it
 

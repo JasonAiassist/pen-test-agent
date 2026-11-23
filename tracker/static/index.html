@@ -135,6 +135,7 @@ textarea{resize:vertical;min-height:64px}
 .banner{border:1px solid var(--border);border-left:3px solid var(--blue);border-radius:6px;padding:7px 10px;
   font-size:11px;color:var(--dim);margin:6px 0 12px}
 .banner.warn{border-left-color:var(--yellow)}
+#aBanner:empty{display:none}
 /* credentials */
 .cred{border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin:8px 0;background:var(--chip)}
 .cred.err{border-color:var(--red)}
@@ -225,6 +226,7 @@ select.field,input,textarea{max-width:100%}
     <div class="tab active" data-tab="dash">Dashboard</div>
     <div class="tab" data-tab="proj">Project</div>
     <div class="tab" data-tab="scan">New scan</div>
+    <div class="tab" data-tab="auth">Authorisations</div>
   </div>
 
   <!-- ================= Dashboard tab ================= -->
@@ -339,7 +341,9 @@ select.field,input,textarea{max-width:100%}
         <div class="fgroup"><label>Approach &amp; rules of engagement</label>
           <textarea id="pApproach" rows="5" placeholder="e.g. OWASP WSTG v4.2 methodology; no social engineering; no DoS; exploit only to proof level; stop conditions…"></textarea></div>
         <div class="fgroup"><label>Written authorisation reference (required before DoS or destructive testing can switch on)</label>
-          <input type="text" id="pAuth" placeholder="e.g. SOW-2026-014 §4.2 signed by J. Smith, 2026-01-05"></div>
+          <input type="text" id="pAuth" list="authRefs" placeholder="pick a record from the Authorisations tab, or a free-text self-authorisation">
+          <datalist id="authRefs"></datalist>
+          <div class="proj-sub" id="pAuthState"></div></div>
       </div>
     </div>
 
@@ -435,6 +439,48 @@ select.field,input,textarea{max-width:100%}
     <div class="panel">
       <h2>Recent scan launches</h2>
       <div id="scanLaunches"><div class="empty">No scans have been launched from here yet.</div></div>
+    </div>
+  </div>
+
+  <!-- ================= Authorisations tab ================= -->
+  <div id="tab-auth" class="hidden" data-toptab="auth">
+    <div class="panel">
+      <h2>Engagement authorisations</h2>
+      <div class="lead">The signed client authorisation behind a scan. Research mode against an
+        <b>external</b> target, or with destructive/DoS testing, only runs when the project's
+        authorisation reference names an <b>active, unexpired</b> record here that permits it and whose
+        scope covers every in-scope target. Lab / internal-only research needs just a free-text
+        self-authorisation on the project. Records are never deleted — revoke them instead; every change is audited.</div>
+      <div class="tscroll"><table id="authTable"></table></div>
+    </div>
+    <div class="panel">
+      <h2 id="aFormTitle">New authorisation</h2>
+      <div class="grid2">
+        <div class="fgroup"><label>Reference (projects link to this)</label>
+          <input type="text" id="aRef" placeholder="e.g. ACME-2026-PT-01"></div>
+        <div class="fgroup"><label>Client</label>
+          <input type="text" id="aClient" placeholder="e.g. Acme Corp Ltd"></div>
+        <div class="fgroup"><label>Contract / SOW reference</label>
+          <input type="text" id="aContract" placeholder="e.g. SOW-2026-014 §4.2"></div>
+        <div class="fgroup"><label>Authorised by (client signatory)</label>
+          <input type="text" id="aBy" placeholder="e.g. J. Smith, CISO"></div>
+        <div class="fgroup"><label>Expires</label>
+          <input type="date" id="aExpires"></div>
+        <div class="fgroup"><label>Permits</label>
+          <label style="font-weight:normal"><input type="checkbox" id="aResearch"> research mode (creative chaining / unknown-flaw discovery)</label><br>
+          <label style="font-weight:normal"><input type="checkbox" id="aDestructive"> destructive / DoS testing</label></div>
+      </div>
+      <div class="fgroup"><label>Authorised scope — one URL, hostname, IP or CIDR per line (must cover every in-scope target)</label>
+        <textarea id="aScope" rows="4" placeholder="https://shop.acme-corp.co.uk&#10;api.acme-corp.co.uk&#10;203.0.113.0/28"></textarea></div>
+      <div class="fgroup"><label>Notes</label>
+        <textarea id="aNotes" rows="2" placeholder="e.g. testing window, emergency contact, exclusions"></textarea></div>
+      <div class="banner" id="aBanner"></div>
+      <div class="proj-actions">
+        <button id="aNew">＋ new</button>
+        <button class="primary" id="aSave">Save authorisation</button>
+        <button class="danger" id="aRevoke" disabled>Revoke</button>
+      </div>
+      <div id="aAudit" class="proj-sub" style="margin-top:10px"></div>
     </div>
   </div>
 
@@ -826,7 +872,7 @@ function projectForm(p){
   $('#pSource').value=c.source_path||'';
   $('#pApproach').value=c.approach||'';
   $('#pWindow').value=c.window||'';
-  $('#pAuth').value=c.authorisation||'';
+  $('#pAuth').value=c.authorisation||'';if(typeof authProjectHint==='function')authProjectHint();
   swResolved={};swWarnings=[];
   renderSwitches(c);scheduleValidate();
   applyHat();rerenderScope();
@@ -1133,6 +1179,64 @@ $('#scanDry').onclick=()=>startScan(true);
 $('#scanStop').onclick=async()=>{if(scanMon.lid&&await askConfirm('Stop this running scan?','Stop scan')){try{await jpost('/api/launches/'+scanMon.lid+'/stop',{});toast('stopping…');}catch(e){toast(e.message,1);}}};
 $('#scanGotoProject').onclick=()=>document.querySelector('.tab[data-tab="proj"]').click();
 
+/* ---------- engagement authorisations ---------- */
+let authRecs=[],authCur=null;
+const AUTH_BADGE={active:'clean',expired:'found',revoked:'error'};
+async function loadAuths(){
+  const d=await jget('/api/authorisations');authRecs=d.authorisations||[];
+  let h='<tr><th>Reference</th><th>Client</th><th>Contract</th><th>Authorised by</th><th>Expires</th><th>Permits</th><th>Scope</th><th>State</th></tr>';
+  for(const r of authRecs){
+    const perm=[r.research_allowed?'research':'',r.destructive_allowed?'destructive':''].filter(Boolean).join(', ')||'—';
+    h+=`<tr class="arow" data-id="${r.id}" style="cursor:pointer"><td><b>${esc(r.ref)}</b></td><td>${esc(r.client)}</td><td>${esc(r.contract_ref)}</td>
+      <td>${esc(r.authorised_by)}</td><td>${esc(r.expires||'—')}</td><td>${esc(perm)}</td>
+      <td>${esc((r.scope||[]).map(e=>e.data).join(', ')||'—')}</td><td><span class="runstate ${AUTH_BADGE[r.state]||''}">${esc(r.state)}</span></td></tr>`;
+  }
+  $('#authTable').innerHTML=authRecs.length?h:'<tr><td class="empty">No authorisations yet — fill in the form below.</td></tr>';
+  $$('#authTable tr.arow').forEach(tr=>tr.onclick=()=>authForm(+tr.dataset.id));
+  $('#authRefs').innerHTML=authRecs.filter(r=>r.state==='active').map(r=>`<option value="${escAttr(r.ref)}">${esc(r.client)} — ${esc(r.contract_ref||'')}</option>`).join('');
+  authProjectHint();
+}
+function authProjectHint(){
+  const el=$('#pAuthState');if(!el)return;const v=($('#pAuth').value||'').trim().replace(/^@/,'');
+  if(!v){el.textContent='';return;}
+  const r=authRecs.find(x=>x.ref===v);
+  el.textContent=r?`Linked to authorisation record ${r.ref} (${r.state}${r.research_allowed?', permits research':''}${r.destructive_allowed?', permits destructive':''}).`
+    :'Free-text self-authorisation: enough for lab/internal research, not for external or destructive research.';
+}
+async function authForm(id){
+  authCur=null;$('#aBanner').textContent='';$('#aAudit').innerHTML='';
+  let r={};
+  if(id){try{r=await jget('/api/authorisations/'+id);authCur=r;}catch(e){return toast(e.message,1);}}
+  $('#aFormTitle').textContent=id?`Authorisation ${r.ref} (${r.state})`:'New authorisation';
+  $('#aRef').value=r.ref||'';$('#aClient').value=r.client||'';$('#aContract').value=r.contract_ref||'';
+  $('#aBy').value=r.authorised_by||'';$('#aExpires').value=r.expires||'';
+  $('#aResearch').checked=!!r.research_allowed;$('#aDestructive').checked=!!r.destructive_allowed;
+  $('#aScope').value=(r.scope||[]).map(e=>e.data).join('\n');$('#aNotes').value=r.notes||'';
+  const ro=!!(r.revoked_at);
+  ['#aRef','#aClient','#aContract','#aBy','#aExpires','#aResearch','#aDestructive','#aScope','#aNotes','#aSave'].forEach(k=>$(k).disabled=ro);
+  $('#aRevoke').disabled=!id||ro;
+  if(r.audit)$('#aAudit').innerHTML='Audit: '+r.audit.map(a=>`${esc(a.at)} ${esc(a.action)}`).join(' · ');
+}
+$('#aNew').onclick=()=>authForm(null);
+$('#aSave').onclick=async()=>{
+  const body={ref:$('#aRef').value.trim(),client:$('#aClient').value.trim(),contract_ref:$('#aContract').value.trim(),
+    authorised_by:$('#aBy').value.trim(),expires:$('#aExpires').value,research_allowed:$('#aResearch').checked,
+    destructive_allowed:$('#aDestructive').checked,notes:$('#aNotes').value.trim(),
+    scope:$('#aScope').value.split(/\n/).map(x=>x.trim()).filter(Boolean).map(d=>({data:d}))};
+  try{const d=await jpost(authCur?'/api/authorisations/'+authCur.id:'/api/authorisations',body);
+    toast('authorisation saved');await loadAuths();authForm(d.id);}
+  catch(e){$('#aBanner').textContent=((e.data&&e.data.problems)||[e.message]).join(' · ');toast('not saved',1);}
+};
+$('#aRevoke').onclick=async()=>{
+  if(!authCur)return;const reason=prompt(`Revoke ${authCur.ref}? Scans linked to it will be refused research mode. Reason:`);
+  if(reason===null)return;
+  try{await jpost(`/api/authorisations/${authCur.id}/revoke`,{reason});toast('revoked');await loadAuths();authForm(authCur.id);}
+  catch(e){toast(e.message,1);}
+};
+$('#pAuth').addEventListener('input',authProjectHint);
+loadAuths().catch(()=>{});
+authForm(null);
+
 /* ---------- wiring ---------- */
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function escAttr(s){return esc(s).replace(/\n/g,' ');}
@@ -1141,6 +1245,7 @@ $$('.tab').forEach(t=>t.onclick=()=>{
   const want=t.dataset.tab;
   $$('[data-toptab]').forEach(sec=>sec.classList.toggle('hidden',sec.dataset.toptab!==want));
   if(want==='scan')scanTabShown();
+  if(want==='auth')loadAuths().catch(e=>toast(e.message,1));
 });
 $('#filterChips').addEventListener('click',e=>{
   const c=e.target.closest('.chip');if(!c)return;

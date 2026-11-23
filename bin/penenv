@@ -12,7 +12,7 @@
 #   penenv ingest             re-ingest strix_runs/ into the tracker DB
 #   penenv report (--project NAME | --run ID) [--out DIR] [--formats html,pdf,docx]
 #                             build a formatted pen-test report (HTML/PDF/Word)
-#   penenv cve sync|status|match|show ...
+#   penenv cve sync|status|match|show|key ...   (key set|clear|status: optional NVD API key)
 #                             host-side CVE knowledge feed (never runs in the sandbox)
 #
 # Scan profile selection (added automatically to strix as --instruction-file):

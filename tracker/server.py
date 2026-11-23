@@ -57,6 +57,7 @@ PORT = int(os.environ.get("PENENV_PORT") or 8766)
 sys.path.insert(0, str(HERE))
 import ingest as ingest_mod  # noqa: E402
 import authenticator  # noqa: E402
+import authorisation as auth_mod  # noqa: E402
 import migrations  # noqa: E402
 import policy  # noqa: E402
 import scope  # noqa: E402
@@ -137,6 +138,7 @@ def ensure_projects_table() -> None:
            )"""
     )
     con.commit()
+    auth_mod.ensure_table(con)
     con.close()
 
 
@@ -303,6 +305,10 @@ class Handler(BaseHTTPRequestHandler):
             if u.path == "/api/policy/catalogue":
                 return self._json(self.api_policy_catalogue())
             parts = u.path.split("/")
+            if len(parts) == 3 and parts[1] == "api" and parts[2] == "authorisations":
+                return self._json(self.api_auth_list())
+            if len(parts) == 4 and parts[1] == "api" and parts[2] == "authorisations":
+                return self._json(self.api_auth_get(parts[3]))
             if len(parts) == 5 and parts[1] == "api" and parts[2] == "projects" and parts[4] == "preflight":
                 return self._json(self.api_project_preflight(parts[3]))
             if len(parts) >= 3 and parts[1] == "api" and parts[2] == "launches":
@@ -344,6 +350,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(ingest_mod.ingest(verbose=False))
             if u.path == "/api/projects/validate":
                 return self._json(self.api_project_validate(body))
+            if len(parts) == 3 and parts[1] == "api" and parts[2] == "authorisations":
+                return self._json(self.api_auth_save(body))
+            if len(parts) == 4 and parts[1] == "api" and parts[2] == "authorisations":
+                return self._json(self.api_auth_save(body, parts[3]))
+            if len(parts) == 5 and parts[1] == "api" and parts[2] == "authorisations" and parts[4] == "revoke":
+                return self._json(self.api_auth_revoke(parts[3], body))
             if len(parts) == 3 and parts[1] == "api" and parts[2] == "projects":
                 return self._json(self.api_project_create(body))
             if len(parts) == 4 and parts[1] == "api" and parts[2] == "projects":
@@ -504,6 +516,69 @@ class Handler(BaseHTTPRequestHandler):
         return {"issues": validate_config(cfg, RESOLVER),
                 "policy": {"switches": sw, "warnings": policy.switch_warnings(cfg),
                            "level": policy.LEVELS[cfg["aggression"]]}}
+
+    # ---- engagement authorisations (research-mode contract gate) ---------------
+    @staticmethod
+    def _auth_id(aid) -> int:
+        try:
+            return int(aid)
+        except (TypeError, ValueError):
+            raise ApiError(404, "unknown authorisation")
+
+    @staticmethod
+    def _auth_view(rec: dict) -> dict:
+        today = auth_mod._today()
+        exp = rec.get("expires") or ""
+        try:
+            expired = bool(exp) and auth_mod._dt.date.fromisoformat(exp) < today
+        except ValueError:
+            expired = True
+        state = "revoked" if rec.get("revoked_at") else ("expired" if expired else "active")
+        return {**{k: v for k, v in rec.items() if k != "inline"}, "state": state}
+
+    def api_auth_list(self):
+        con = db()
+        try:
+            return {"authorisations": [self._auth_view(r) for r in auth_mod.list_records(con)]}
+        finally:
+            con.close()
+
+    def api_auth_get(self, aid):
+        aid = self._auth_id(aid)
+        con = db()
+        try:
+            row = con.execute("SELECT ref FROM authorisations WHERE id=?", (aid,)).fetchone()
+            if not row:
+                raise ApiError(404, "unknown authorisation")
+            rec = auth_mod.get_record(con, row["ref"])
+            return {**self._auth_view(rec), "audit": auth_mod.audit_trail(con, aid)}
+        finally:
+            con.close()
+
+    def api_auth_save(self, body, aid=None):
+        if not isinstance(body, dict):
+            raise ApiError(400, "authorisation object required")
+        aid = None if aid is None else self._auth_id(aid)
+        con = db()
+        try:
+            rec, errs = auth_mod.save_record(con, body, aid)
+        finally:
+            con.close()
+        if errs:
+            code = 404 if errs == ["unknown authorisation"] else (409 if "already exists" in errs[0] else 400)
+            raise ApiError(code, f"{len(errs)} problem(s): " + "; ".join(errs), problems=errs)
+        return {"ok": True, **self._auth_view(rec)}
+
+    def api_auth_revoke(self, aid, body):
+        aid = self._auth_id(aid)
+        con = db()
+        try:
+            rec = auth_mod.revoke_record(con, aid, str((body or {}).get("reason") or "").strip())
+        finally:
+            con.close()
+        if rec is None:
+            raise ApiError(404, "unknown authorisation")
+        return {"ok": True, **self._auth_view(rec)}
 
     def api_policy_catalogue(self):
         def auto_txt(rule):

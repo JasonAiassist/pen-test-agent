@@ -26,7 +26,7 @@ tracker/backups/
 *.p12
 secrets/
 
-# Engagement authorisation records (client contracts) — template lives in docs/
+# Legacy engagement-authorisation files (records now live in the tracker DB)
 authorisations/
 
 # LibreOffice / report scratch
