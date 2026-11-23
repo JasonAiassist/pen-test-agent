@@ -506,7 +506,7 @@ select.field,input,textarea{max-width:100%}
           <select class="field" id="agActProvider"></select></div>
         <div class="fgroup"><label>Model</label>
           <select class="field" id="agModelPick" title="every model the provider reported"></select>
-          <input type="text" id="agActModel" placeholder="…or type a model id">
+          <input type="text" id="agActModel" placeholder="type a model id">
           <div class="proj-actions"><button id="agFetch" title="ask the provider which models it offers">Fetch models</button>
             <span class="proj-sub" id="agFetchMsg"></span></div></div>
         <div class="fgroup"><label>Reasoning effort</label>
@@ -1343,10 +1343,9 @@ function agActProviderChanged(){
   const p=AG.providers.find(x=>x.id===$('#agActProvider').value);
   const sd=AG.strix_default;
   $('#agActModel').disabled=!p;$('#agFetch').disabled=!p;$('#agEffort').disabled=!p;
+  if(!p)$('#agActModel').value=sd.model||'';  // Strix default: show its own model (read-only)
   agFillModels(p?.models||[]);
   if(p){$('#agFetchMsg').textContent=(p.models||[]).length?`${p.models.length} known model(s)`:'';return;}
-  // Strix default: show what Strix's own config uses (read-only)
-  $('#agActModel').value=sd.model||'';
   if(sd.reasoning_effort&&AG.efforts.includes(sd.reasoning_effort))$('#agEffort').value=sd.reasoning_effort;
   $('#agFetchMsg').textContent=sd.model?`Set in ${sd.path} — use “Import from Strix config” to make it editable here.`
     :`No model set in ${sd.path}.`;
@@ -1365,17 +1364,22 @@ function agKindChanged(){
   $('#agKey').placeholder=k.needs_key?'paste the key':'not needed';
 }
 $('#agKind').onchange=agKindChanged;
-// Full model dropdown (a <datalist> would filter suggestions by the text already typed).
+// One Model control: a dropdown of every fetched model (a <datalist> would filter by typed
+// text). #agActModel holds the chosen id; it is only shown when "Other…" is picked.
+const AG_OTHER='__other__';
 function agFillModels(models){
-  const sel=$('#agModelPick'),cur=$('#agActModel').value.trim();
-  sel.innerHTML=`<option value="">${models.length?`— ${models.length} model(s) —`:'— no model list; fetch or type below —'}</option>`+
-    models.map(m=>`<option value="${escAttr(m)}">${esc(m)}</option>`).join('');
-  sel.disabled=!models.length||$('#agActModel').disabled;
-  sel.value=models.includes(cur)?cur:'';
+  const sel=$('#agModelPick'),txt=$('#agActModel'),cur=txt.value.trim(),off=txt.disabled;
+  const list=off&&cur&&!models.includes(cur)?[cur,...models]:[...models];
+  sel.innerHTML=`<option value="">${list.length?'— choose a model —':off?'— not set —':'— no model list —'}</option>`+
+    list.map(m=>`<option value="${escAttr(m)}">${esc(m)}</option>`).join('')+
+    (off?'':`<option value="${AG_OTHER}">Other… (type a model id)</option>`);
+  sel.disabled=off;
+  sel.value=list.includes(cur)?cur:(!off&&(cur||!list.length))?AG_OTHER:'';
+  txt.classList.toggle('hidden',sel.value!==AG_OTHER);
 }
-$('#agModelPick').onchange=()=>{if($('#agModelPick').value)$('#agActModel').value=$('#agModelPick').value;};
-$('#agActModel').oninput=()=>{const v=$('#agActModel').value.trim(),sel=$('#agModelPick');
-  sel.value=[...sel.options].some(o=>o.value===v)?v:'';};
+$('#agModelPick').onchange=()=>{const v=$('#agModelPick').value,txt=$('#agActModel');
+  const other=v===AG_OTHER;txt.classList.toggle('hidden',!other);
+  if(other){txt.focus();}else txt.value=v;};
 $('#agActProvider').onchange=()=>{$('#agActModel').value='';agActProviderChanged();};
 $('#agProvTable').addEventListener('click',e=>{const a=e.target.closest('[data-agedit]');if(a)agForm(a.dataset.agedit);
   if(e.target.closest('[data-agimport]'))$('#agImport').click();});
@@ -1396,7 +1400,7 @@ $('#agDelete').onclick=async()=>{
 };
 $('#agImport').onclick=async()=>{
   try{const r=await jpost('/api/agent/import-strix',{});agCur=r.provider.id;await loadAgent();
-    $('#agActProvider').value=r.provider.id;agActProviderChanged();$('#agActModel').value=r.model;
+    $('#agActProvider').value=r.provider.id;agActProviderChanged();$('#agActModel').value=r.model;agFillModels(AG.providers.find(x=>x.id===r.provider.id)?.models||[]);
     $('#agEffort').value=r.reasoning_effort;toast('imported — press “Use this model” to select it');}
   catch(e){toast(e.message,1);}
 };
