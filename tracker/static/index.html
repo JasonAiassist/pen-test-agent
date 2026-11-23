@@ -1321,23 +1321,35 @@ async function loadAgent(){
   $('#agEffort').value=AG.active.reasoning_effort||'high';
   $('#agKind').innerHTML=AG.kinds.map(k=>`<option value="${k.kind}">${esc(k.label)}</option>`).join('');
   agActProviderChanged();
-  let h='<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th><th>Models</th><th></th></tr>';
+  let h='<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th><th>Model(s)</th><th></th></tr>';
+  if(sd.exists||sd.model){
+    const inUse=!AG.active.provider_id;
+    h+=`<tr><td>Strix default${inUse?' <span class="res-on">in use</span>':''}<br><span class="proj-sub">${esc(sd.path)} · read-only</span></td>
+      <td>Strix config${sd.api_type?' · '+esc(sd.api_type):''}</td><td>${esc(sd.api_base||'(provider default)')}</td>
+      <td>${sd.has_key?'set':'—'}</td><td>${esc(sd.model||'— not set —')}${sd.reasoning_effort?' · reasoning '+esc(sd.reasoning_effort):''}</td>
+      <td><span class="linkish" data-agimport="1" title="copy this into an editable provider">import</span></td></tr>`;
+  }
   for(const p of AG.providers){
     const inUse=p.id===AG.active.provider_id;
     h+=`<tr><td>${esc(p.name)}${inUse?' <span class="res-on">in use</span>':''}</td><td>${esc(p.kind)}</td>
       <td>${esc(p.api_base||agKindInfo(p.kind).default_base||'')}</td><td>${p.api_key?'set':'—'}</td>
       <td>${(p.models||[]).length}</td><td><span class="linkish" data-agedit="${escAttr(p.id)}">edit</span></td></tr>`;
   }
-  $('#agProvTable').innerHTML=AG.providers.length?h:'<tr><td class="empty">No providers yet — add one below, or import the one Strix already uses.</td></tr>';
+  $('#agProvTable').innerHTML=(AG.providers.length||sd.exists||sd.model)?h:'<tr><td class="empty">No providers yet — add one below.</td></tr>';
   if(agCur&&!AG.providers.find(p=>p.id===agCur))agCur=null;
   agForm(agCur);
 }
 function agActProviderChanged(){
   const p=AG.providers.find(x=>x.id===$('#agActProvider').value);
-  $('#agActModel').disabled=!p;$('#agFetch').disabled=!p;
+  const sd=AG.strix_default;
+  $('#agActModel').disabled=!p;$('#agFetch').disabled=!p;$('#agEffort').disabled=!p;
   $('#agModelList').innerHTML=(p?.models||[]).map(m=>`<option value="${escAttr(m)}">`).join('');
-  $('#agFetchMsg').textContent=p?((p.models||[]).length?`${p.models.length} known model(s)`:''):'Strix default uses its own model setting.';
-  if(!p)$('#agActModel').value='';
+  if(p){$('#agFetchMsg').textContent=(p.models||[]).length?`${p.models.length} known model(s)`:'';return;}
+  // Strix default: show what Strix's own config uses (read-only)
+  $('#agActModel').value=sd.model||'';
+  if(sd.reasoning_effort&&AG.efforts.includes(sd.reasoning_effort))$('#agEffort').value=sd.reasoning_effort;
+  $('#agFetchMsg').textContent=sd.model?`Set in ${sd.path} — use “Import from Strix config” to make it editable here.`
+    :`No model set in ${sd.path}.`;
 }
 function agForm(id){
   agCur=id;const p=AG.providers.find(x=>x.id===id)||{kind:'openai-compatible'};
@@ -1353,8 +1365,9 @@ function agKindChanged(){
   $('#agKey').placeholder=k.needs_key?'paste the key':'not needed';
 }
 $('#agKind').onchange=agKindChanged;
-$('#agActProvider').onchange=()=>{agActProviderChanged();$('#agActModel').value='';};
-$('#agProvTable').addEventListener('click',e=>{const a=e.target.closest('[data-agedit]');if(a)agForm(a.dataset.agedit);});
+$('#agActProvider').onchange=()=>{$('#agActModel').value='';agActProviderChanged();};
+$('#agProvTable').addEventListener('click',e=>{const a=e.target.closest('[data-agedit]');if(a)agForm(a.dataset.agedit);
+  if(e.target.closest('[data-agimport]'))$('#agImport').click();});
 $('#agNew').onclick=()=>{agForm(null);$('#agName').focus();};
 $('#agSave').onclick=async()=>{
   const body={name:$('#agName').value,kind:$('#agKind').value,api_base:$('#agBase').value,
