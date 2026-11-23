@@ -115,6 +115,23 @@ class TestAgentCfg(unittest.TestCase):
         with self.assertRaises(agentcfg.AgentConfigError):
             agentcfg.import_strix_default()
 
+    def test_seed_from_strix_once(self):
+        r = agentcfg.seed_from_strix()
+        self.assertIsNotNone(r)
+        e = agentcfg.effective()
+        # same model, endpoint and effort as Strix's own config, now as a configured provider
+        self.assertEqual((e["source"], e["model"], e["api_base"], e["reasoning_effort"]),
+                         ("penenv", "openai/glm-5.3", "https://api.z.ai/api/coding/paas/v4", "high"))
+        p = agentcfg._provider(agentcfg.load(), e["provider_id"])
+        self.assertEqual((p["kind"], p["api_key"], p["api_type"]), ("openai-compatible", "zai-KEY", "chat_completions"))
+        self.assertEqual(stat.S_IMODE(os.stat(agentcfg.CONFIG_PATH).st_mode), 0o600)
+        agentcfg.delete_provider(p["id"])
+        self.assertIsNone(agentcfg.seed_from_strix())      # never re-seeds once agent.json exists
+        self.assertEqual(agentcfg.load()["providers"], [])
+        reset({"STRIX_IMAGE": "img"})                        # no STRIX_LLM -> nothing to seed
+        self.assertIsNone(agentcfg.seed_from_strix())
+        self.assertFalse(agentcfg.CONFIG_PATH.exists())
+
     def test_list_models_success_and_failure(self):
         p = agentcfg.save_provider({"name": "OAI", "kind": "openai", "api_key": KEY})
         seen = {}
@@ -151,7 +168,10 @@ class TestAgentApi(unittest.TestCase):
 
     def test_api_flow_never_returns_key(self):
         st, d = self.s.call("GET", "/api/agent")
-        self.assertEqual((st, d["effective"]["source"]), (200, "strix"))
+        # first visit adopts Strix's existing setup as a selected provider (key still masked)
+        self.assertEqual((st, d["effective"]["source"], d["effective"]["model"]), (200, "penenv", "openai/glm-5.3"))
+        self.assertEqual(len(d["providers"]), 1)
+        self.assertNotIn("zai-KEY", json.dumps(d))
         st, d = self.s.call("POST", "/api/agent/providers", {"name": "OAI", "kind": "openai", "api_key": KEY})
         self.assertEqual((st, d["api_key"]), (200, agentcfg.MASK))
         pid = d["id"]

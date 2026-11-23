@@ -5,6 +5,11 @@ the Strix agent runs on. There is no chat with the agent yet; this only picks th
 
 ## Using it
 
+**First visit:** if `~/.config/penenv/agent.json` doesn't exist yet and Strix's own config has
+a model, penenv imports that setup (endpoint, key, API type, model, reasoning effort) as a
+provider and selects it, so **Fetch models** works immediately and scans keep the same model.
+This happens only once; deleting the provider afterwards is respected.
+
 1. **Model providers** panel → fill in a provider and **Save provider**:
    - *Provider type* — OpenAI-compatible endpoint (Z.ai, vLLM, LM Studio, …), OpenAI,
      Anthropic, OpenRouter, DeepSeek, Google Gemini or Ollama (local).

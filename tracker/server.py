@@ -414,6 +414,7 @@ class Handler(BaseHTTPRequestHandler):
             raise ApiError(404 if str(e).startswith("unknown") else 400, str(e)) from None
 
     def api_agent(self):
+        agentcfg.seed_from_strix()  # first visit: adopt the existing Strix provider/model
         return {**agentcfg.masked(agentcfg.load()), "effective": agentcfg.effective(),
                 "strix_default": agentcfg.strix_default(), "kinds": agentcfg.kinds(),
                 "efforts": list(agentcfg.EFFORTS), "config_path": str(agentcfg.CONFIG_PATH)}

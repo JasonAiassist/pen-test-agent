@@ -210,6 +210,21 @@ def import_strix_default() -> dict:
             "reasoning_effort": d["reasoning_effort"] or "high"}
 
 
+def seed_from_strix() -> dict | None:
+    """First use only (no agent.json yet): adopt Strix's existing setup as a real, selected
+    provider so its endpoint is configured here (model listing works) and scans keep using
+    the same model. Never re-runs once agent.json exists, so deletions are respected."""
+    if CONFIG_PATH.exists() or not strix_default()["model"]:
+        return None
+    try:
+        r = import_strix_default()
+    except AgentConfigError:
+        return None
+    set_active({"provider_id": r["provider"]["id"], "model": r["model"],
+                "reasoning_effort": r["reasoning_effort"]})
+    return r
+
+
 # ---- resolution for a scan ---------------------------------------------------
 def strix_model(p: dict, model: str) -> str:
     prefix = KINDS[p["kind"]][1]
