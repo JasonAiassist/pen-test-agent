@@ -181,6 +181,14 @@ def load_findings(run_dir: Path) -> list[dict]:
         except (TypeError, ValueError):
             d["_cvss"] = None
         d["cwe"] = (d.get("cwe") or "").strip() or "Unclassified"
+        # CVE references a finding may carry (string, list, or a comma/space-separated field).
+        raw_cve = d.get("cve") or d.get("cves") or d.get("cve_ids") or ""
+        if isinstance(raw_cve, (list, tuple)):
+            cves = [str(c).strip() for c in raw_cve if str(c).strip()]
+        else:
+            cves = re.findall(r"CVE-\d{4}-\d{4,7}", str(raw_cve).upper())
+        d["_cves"] = cves
+        d["_kev"] = bool(d.get("kev") or d.get("known_exploited") or d.get("exploited"))
         norm.append(d)
     norm.sort(key=lambda d: (SEV_RANK[d["severity"]], -(d["_cvss"] or 0)))
     return norm
@@ -415,6 +423,11 @@ def _finding_meta_items(f: dict) -> list[tuple[str, str]]:
         ("Confidence", _esc((f.get("confidence") or "").title())),
         ("Fix effort", _esc((f.get("fix_effort") or "").title())),
     ]
+    if f.get("_cves"):
+        kev = ' <span class="badge sev-critical">KEV</span>' if f.get("_kev") else ""
+        items.append(("CVE", ", ".join(_esc(c) for c in f["_cves"]) + kev))
+    elif f.get("_kev"):
+        items.append(("CVE", '<span class="badge sev-critical">Known-exploited</span>'))
     loc = ((f.get("method") or "") + " " + (f.get("endpoint") or "")).strip() or f.get("target", "")
     if loc:
         items.append(("Location", f"<code>{_esc(loc)}</code>"))

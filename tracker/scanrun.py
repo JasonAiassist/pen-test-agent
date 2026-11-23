@@ -29,6 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
+import cvefeed  # noqa: E402
 import policy  # noqa: E402
 import scope  # noqa: E402
 
@@ -143,7 +144,7 @@ def pick_subnet() -> str:
 
 
 # ------------------------------------------------------------------- plan
-def build(name: str, profile: str | None):
+def build(name: str, profile: str | None, use_cve: bool = True):
     pid, cfg = load_project(name)
     nets = docker_networks()
     p = policy.build_policy(cfg, make_resolver(nets))
@@ -156,6 +157,15 @@ def build(name: str, profile: str | None):
         if not prof.is_file():
             raise SystemExit(f"[penenv] unknown profile {profile!r}")
         instructions += "\n" + prof.read_text()
+    # Research mode always carries the hypothesis-driven profile, in addition to any chosen one.
+    if p.get("research") and profile != "research":
+        instructions += "\n" + (ROOT / "profiles" / "research.md").read_text()
+    # Host-curated CVE intelligence, injected as instruction text only (the sandbox never
+    # reaches the internet for it). Best-effort: silently skipped when no library/stack.
+    cve_block = cvefeed.context_for_project(cfg, enabled=use_cve)
+    if cve_block:
+        instructions += "\n" + cve_block
+    p["cve_context"] = bool(cve_block)
     return pid, cfg, p, nets, strix_targets, instructions
 
 
@@ -222,7 +232,9 @@ def summary(p: dict) -> dict:
             "conn_rate": p["network"]["conn_rate"], "bw": p["network"]["bw"],
             "switches_on": sorted(k for k, v in p["switches"].items() if v["on"]),
             "disabled_tools": p["disabled_tools"], "deny_paths": p["deny_paths"],
-            "credentials": p["credentials"], "mfa": p["mfa"], "warnings": p["warnings"]}
+            "credentials": p["credentials"], "mfa": p["mfa"],
+            "research": p.get("research", False), "authorisation": p.get("authorisation_ref", ""),
+            "cve_context": p.get("cve_context", False), "warnings": p["warnings"]}
 
 
 def print_plan(name, p, targets, nets) -> None:
@@ -247,6 +259,9 @@ def print_plan(name, p, targets, nets) -> None:
     print("penenv tools:", ", ".join(p["penenv_tools"]) or "-")
     print("credentials (labels only; secrets are fetched by the agent through the audited channel):",
           ", ".join(p["credentials"]) or "-")
+    if p.get("research"):
+        print(f"research mode: ON (authorisation: {p.get('authorisation_ref') or '(inline)'})")
+    print("CVE intelligence injected:", "yes" if p.get("cve_context") else "no")
     for w in p["warnings"]:
         print("WARNING:", w)
     for e in p["errors"]:
@@ -310,7 +325,8 @@ def exit_meaning(rc: int) -> str:
 
 
 def run(args) -> int:
-    pid, cfg, p, nets, targets, instructions = build(args.project, args.profile)
+    pid, cfg, p, nets, targets, instructions = build(args.project, args.profile,
+                                                     use_cve=not args.no_cve)
     print_plan(args.project, p, targets, nets)
     if p["errors"]:
         log("plan has errors; nothing was started")
@@ -422,6 +438,8 @@ def main(argv=None) -> int:
     ap.add_argument("--kdbx-password-file", help="0600 file holding the authenticator master password")
     ap.add_argument("--keep", action="store_true", help="keep gateway/network for inspection")
     ap.add_argument("--max-turns", type=int, help="lower the per-agent turn cap (never raises the policy value)")
+    ap.add_argument("--no-cve", action="store_true",
+                    help="do not inject host-curated CVE intelligence into the agent instructions")
     return run(ap.parse_args(argv))
 
 

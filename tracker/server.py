@@ -207,6 +207,9 @@ def _normalise_config(cfg: dict) -> dict:
         cfg["position"] = scope.default_position(cfg["hat"])
     cfg["switches"] = policy.migrate_switches(cfg.get("switches"))
     cfg["authorisation"] = str(cfg.get("authorisation") or "").strip()
+    raw_stack = cfg.get("stack")
+    cfg["stack"] = ([str(s).strip() for s in raw_stack if str(s).strip()]
+                    if isinstance(raw_stack, list) else [])
     try:
         cfg["aggression"] = max(0, min(5, int(cfg.get("aggression", 2))))
     except (TypeError, ValueError):

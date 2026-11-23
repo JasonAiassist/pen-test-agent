@@ -4,6 +4,7 @@ import sqlite3
 import unittest
 
 import helpers
+import migrations
 import server
 
 CRED = {"label": "admin", "login_url": "https://shop.acme-corp.co.uk/login", "username": "admin",
@@ -120,12 +121,19 @@ class TestApi(unittest.TestCase):
         st, got = self.s.call("GET", f"/api/projects/{pid}")
         sw = got["config"]["switches"]
         self.assertEqual((sw["bruteforce"], sw["sqlmap"], sw["dos"], sw["nmap"]), ("on", "off", "on", "auto"))
-        self.assertEqual(got["config"]["schema"], 4)
+        self.assertEqual(got["config"]["schema"], migrations.CONFIG_VERSION)
 
     def test_policy_catalogue(self):
         st, d = self.s.call("GET", "/api/policy/catalogue")
         self.assertEqual(st, 200)
         self.assertEqual({x["id"] for x in d["switches"]}, set(server.policy.SWITCH_BY_ID))
+        self.assertIn("research", {x["id"] for x in d["switches"]})
+
+    def test_stack_roundtrips_and_is_cleaned(self):
+        pid = self.create(cfg(endpoints=[{"type": "url", "data": "https://shop.acme-corp.co.uk"}],
+                              stack=["openssh 8.1", "  ", "express 4.18"]))["id"]
+        st, got = self.s.call("GET", f"/api/projects/{pid}")
+        self.assertEqual(got["config"]["stack"], ["openssh 8.1", "express 4.18"])
 
     def test_dashboard_served(self):
         import urllib.request

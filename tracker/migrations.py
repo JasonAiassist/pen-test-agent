@@ -12,6 +12,9 @@ Project config versions:
   v4  position = external|internal|both (test position, independent of the hat).
       Default keeps v3 behaviour: White -> both; Grey/Black -> external (they were
       internet-facing only before v4)
+  v5  stack = [str] declared product/version stack (e.g. "openssh 8.1", "express 4.18",
+      or a CPE). Optional; drives host-curated CVE-feed matching (tracker/cvefeed.py).
+      Default [] for existing projects (no CVE context injected until a stack is set).
 
 Rules: a backup is written before any row changes; legacy values that cannot
 be typed are kept with type "" (the UI and validator flag them) - never dropped.
@@ -28,7 +31,7 @@ from pathlib import Path
 import policy
 import scope
 
-CONFIG_VERSION = 4
+CONFIG_VERSION = 5
 
 HAT_FROM_LABEL = {"black": "black", "grey": "grey", "gray": "grey", "white": "white"}
 
@@ -84,6 +87,12 @@ def migrate_config(cfg: dict) -> dict:
     out = dict(out)
     if out.get("position") not in scope.POSITIONS:
         out["position"] = scope.default_position(out.get("hat"))
+    if out.get("schema") == 4:
+        out["schema"] = 5
+    if not isinstance(out.get("stack"), list):
+        out["stack"] = []
+    else:
+        out["stack"] = [str(s) for s in out["stack"] if str(s).strip()]
     out["schema"] = CONFIG_VERSION
     return out
 

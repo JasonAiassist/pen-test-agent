@@ -1,0 +1,14 @@
+{
+  "ref": "ACME-2026-Q4",
+  "client": "ACME Ltd",
+  "contract_ref": "SOW-2026-14 §3 (penetration test, research scope)",
+  "authorised_by": "Jane Doe, CISO, ACME Ltd",
+  "expires": "2026-12-31",
+  "research_allowed": true,
+  "destructive_allowed": false,
+  "scope": [
+    "https://app.acme.example.com",
+    { "type": "cidr", "data": "203.0.113.0/24" }
+  ],
+  "notes": "Copy this file to authorisations/ACME-2026-Q4.json (that directory is git-ignored), fill in the real contract details, and set the project's 'authorisation' field to the ref. Research mode against external or destructive targets is refused unless a matching, unexpired record here covers every in-scope target."
+}

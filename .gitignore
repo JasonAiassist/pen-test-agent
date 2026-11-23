@@ -26,6 +26,9 @@ tracker/backups/
 *.p12
 secrets/
 
+# Engagement authorisation records (client contracts) — template lives in docs/
+authorisations/
+
 # LibreOffice / report scratch
 .~lock.*#
 lu*.tmp

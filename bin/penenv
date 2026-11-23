@@ -12,6 +12,8 @@
 #   penenv ingest             re-ingest strix_runs/ into the tracker DB
 #   penenv report (--project NAME | --run ID) [--out DIR] [--formats html,pdf,docx]
 #                             build a formatted pen-test report (HTML/PDF/Word)
+#   penenv cve sync|status|match|show ...
+#                             host-side CVE knowledge feed (never runs in the sandbox)
 #
 # Scan profile selection (added automatically to strix as --instruction-file):
 #   penenv scan URL -p auth-session|access-control|injection|api-security|business-logic|data-exposure|full-saas [-m quick|standard|deep]
@@ -179,6 +181,12 @@ cmd_report() {
   python3 "$ROOT/tracker/report.py" "$@"
 }
 
+# Host-side CVE library. Runs on the host only (never in the Strix sandbox); no docker needed.
+cmd_cve() {
+  cd "$ROOT" || return 1
+  python3 "$ROOT/tracker/cvefeed.py" "$@"
+}
+
 case "${1:-help}" in
   up) shift; cmd_up "$@" ;;
   down) shift; cmd_down "$@" ;;
@@ -188,5 +196,6 @@ case "${1:-help}" in
   tracker) shift; cmd_tracker "$@" ;;
   ingest) python3 "$ROOT/tracker/ingest.py" ;;
   report) shift; cmd_report "$@" ;;
-  help|*) sed -n '2,20p' "$0" ;;
+  cve) shift; cmd_cve "$@" ;;
+  help|*) sed -n '2,22p' "$0" ;;
 esac

@@ -22,6 +22,12 @@ Every tool named here exists in `sandbox-inventory.md` or in Strix's `_BASE_TOOL
 1. Out-of-scope entries are always dropped at the gateway (HARD-net).
 2. Black hat carries no credentials (save-time rejection), so credential/MFA tools are never registered.
 3. `DoS` and `Destructive` need the written authorisation reference field filled in, at any level.
+4. `research` mode is refused unless the project carries an authorisation reference. Lab/internal,
+   non-destructive research accepts a lightweight self-authorisation (any non-empty reference); but
+   research against **external** targets, or combined with **destructive/DoS**, requires a *structured*
+   authorisation record (`authorisations/<ref>.json`) that is unexpired, permits research (and
+   destructive, if used), and whose scope covers every in-scope target. Enforced fail-closed in
+   `build_policy` via `tracker/authorisation.py`. See `docs/research-mode.md`.
 
 ## Hat level vs test position (config v4)
 
@@ -87,6 +93,7 @@ Not in the sandbox (so not switchable as binaries): `hydra`, `medusa`, `john`, `
 | `dos` | load / resource exhaustion (lifts the rate cap to L5's) | SOFT-method + HARD-net | L5, needs authorisation |
 | `destructive` | data-altering / deleting payloads | SOFT-method | L5, needs authorisation |
 | `autoexploit` | exploit confirmed findings beyond proof | SOFT-method | L3+ |
+| `research` | security research mode — hypothesis-driven vulnerability chaining and unknown-flaw discovery (adds `profiles/research.md`) | SOFT-method | off; needs authorisation (see below) |
 | `social_engineering` | phishing, pretexting | CONTRACT (nothing executable) | off |
 | `physical` | on-site testing | CONTRACT | off |
 | `notify_critical`, `free_retest`, `cvss` | reporting/contract terms | CONTRACT | off |

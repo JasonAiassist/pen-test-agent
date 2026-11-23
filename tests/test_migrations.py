@@ -58,7 +58,8 @@ class TestMigration(unittest.TestCase):
         self.assertEqual({v for k, v in c["switches"].items() if k != "dos"}, {"auto"})
         self.assertEqual(c["authorisation"], "")
         self.assertEqual(c["position"], "both")  # white hat -> both
-        self.assertEqual(c["schema"], 4)
+        self.assertEqual(c["stack"], [])  # v5: optional product stack, empty by default
+        self.assertEqual(c["schema"], migrations.CONFIG_VERSION)
 
     def test_v3_to_v4_position_default_keeps_behaviour(self):
         v3 = dict(migrations.migrate_config(LEGACY), schema=3)
@@ -66,11 +67,22 @@ class TestMigration(unittest.TestCase):
             c = dict(v3, hat=hat)
             c.pop("position")
             got = migrations.migrate_config(c)
-            self.assertEqual((got["position"], got["schema"]), (want, 4))
+            self.assertEqual((got["position"], got["schema"]), (want, migrations.CONFIG_VERSION))
             self.assertEqual(got["switches"], v3["switches"])
             self.assertEqual(got["endpoints"], v3["endpoints"])
         explicit = dict(v3, hat="grey", position="internal")
         self.assertEqual(migrations.migrate_config(explicit)["position"], "internal")
+
+    def test_v4_to_v5_adds_stack_default_empty(self):
+        v4 = dict(migrations.migrate_config(LEGACY), schema=4)
+        v4.pop("stack", None)
+        got = migrations.migrate_config(v4)
+        self.assertEqual((got["stack"], got["schema"]), ([], migrations.CONFIG_VERSION))
+        # an explicit stack is preserved and cleaned of blanks
+        explicit = dict(v4, stack=["openssh 8.1", "  ", "express 4.18"])
+        explicit.pop("schema", None)
+        explicit["schema"] = 4
+        self.assertEqual(migrations.migrate_config(explicit)["stack"], ["openssh 8.1", "express 4.18"])
 
     def test_v2_to_v3_keeps_v2_data(self):
         v2 = migrations.migrate_config(LEGACY)

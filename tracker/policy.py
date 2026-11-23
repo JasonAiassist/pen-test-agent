@@ -18,6 +18,7 @@ import ipaddress
 from typing import Callable
 from urllib.parse import urlsplit
 
+import authorisation
 import scope
 
 # ------------------------------------------------------------------ levels
@@ -104,6 +105,8 @@ SWITCHES: list[dict] = [
     {"id": "destructive", "label": "Destructive / data-altering payloads", "cls": "SOFT-method", "auto": 5,
      "needs_auth": True},
     {"id": "autoexploit", "label": "Exploit confirmed findings beyond proof", "cls": "SOFT-method", "auto": 3},
+    {"id": "research", "label": "Security research mode (hypothesis-driven vulnerability chaining and "
+     "unknown-flaw discovery)", "cls": "SOFT-method", "auto": "never", "needs_auth": True},
     {"id": "social_engineering", "label": "Social engineering", "cls": "CONTRACT", "auto": "never"},
     {"id": "physical", "label": "Physical testing", "cls": "CONTRACT", "auto": "never"},
     {"id": "notify_critical", "label": "Alert on CRITICAL finding", "cls": "CONTRACT", "auto": "never"},
@@ -341,6 +344,23 @@ def build_policy(cfg: dict, resolver: Callable[[str], list[str]] = scope.default
     if not net["targets"] and level > 0:
         errors.append("no usable in-scope target")
 
+    # Research mode contract gate (fail-closed): external/destructive/DoS research needs a
+    # structured, unexpired authorisation record whose scope covers every in-scope target.
+    research = sw["research"]["on"]
+    authorisation_ref = ""
+    if research:
+        rec = authorisation.load_record(cfg)
+        ok, reasons = authorisation.authorise_research(
+            rec, position=net["position"], destructive=sw["destructive"]["on"],
+            dos=sw["dos"]["on"], in_scope=cfg.get("endpoints") or [])
+        if ok:
+            authorisation_ref = (rec or {}).get("ref", "")
+        else:
+            research = False
+            sw["research"] = {"on": False, "source": "invariant",
+                              "why": "research mode refused: " + "; ".join(reasons)}
+            errors += ["research mode refused: " + r for r in reasons]
+
     policy = {
         "level": level, "level_name": lv["name"], "hat": hat, "position": net["position"],
         "strix": {"scan_mode": lv["mode"], "max_turns": lv["max_turns"], "whitebox": whitebox,
@@ -355,6 +375,7 @@ def build_policy(cfg: dict, resolver: Callable[[str], list[str]] = scope.default
         "credentials": [c.get("label") or c.get("username") for c in creds] if "get_test_credential" in penenv_tools else [],
         "mfa": [c.get("label") or c.get("username") for c in creds if c.get("otp_ref")] if "get_mfa_code" in penenv_tools else [],
         "switches": sw, "soft_exclusions": net["soft_exclusions"],
+        "research": research, "authorisation_ref": authorisation_ref,
         "errors": errors, "warnings": warnings,
     }
     policy["preamble"] = render_preamble(cfg, policy)
@@ -387,6 +408,15 @@ def render_preamble(cfg: dict, p: dict) -> str:
     lines.append("Allowed: " + "; ".join(on))
     lines.append("NOT allowed (disabled binaries fail with 'penenv policy: denied'; do not re-implement them): "
                  + "; ".join(off))
+    if p.get("research"):
+        lines.append("RESEARCH MODE (authorised): you may form hypotheses and chain weaknesses "
+                     "creatively to surface non-obvious and previously-unknown flaws — multi-step "
+                     "logic/business-flaw abuse, trust-boundary and state-machine attacks, and the "
+                     "composition of individually low-severity issues into a higher-impact chain. "
+                     "Every step must still obey the scope, rate and method limits above; prove each "
+                     "link with reproducible evidence and stop at proof. Record the hypothesis and "
+                     "the chain for every reported finding."
+                     + (f" Authorisation reference: {p['authorisation_ref']}." if p.get("authorisation_ref") else ""))
     if p["credentials"]:
         lines.append("Test logins are available through the get_test_credential tool by label: "
                      + ", ".join(p["credentials"]) + ". Never print a password in a report.")
