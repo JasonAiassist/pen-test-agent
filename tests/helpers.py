@@ -18,6 +18,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 TMP = Path(tempfile.mkdtemp(prefix="penenv-test-"))
 os.environ["PENENV_DB"] = str(TMP / "test.db")
+# Agent config: never read or write the real ~/.config/penenv/agent.json or ~/.strix config.
+os.environ["PENENV_AGENT_CONFIG"] = str(TMP / "agent.json")
+os.environ["PENENV_STRIX_CONFIG"] = str(TMP / "strix-cli-config.json")
 sys.path.insert(0, str(ROOT / "tracker"))
 
 import ingest  # noqa: E402

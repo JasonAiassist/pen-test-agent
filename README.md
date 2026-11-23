@@ -59,6 +59,12 @@ controls Strix's agentic depth. Full reports stay in `strix_runs/<run>/`
 (penetration_test_report.md, per-finding markdown, SARIF in `sarif/sarif.json`).
 Generated client-ready reports are written to `reports/`; see `docs/reporting.md`.
 
+**Agent model.** The dashboard's **Agent config** tab chooses the model provider and model
+Strix runs on (OpenAI-compatible endpoints such as Z.ai, OpenAI, Anthropic, OpenRouter,
+DeepSeek, Gemini, Ollama). Keys stay on this machine in `~/.config/penenv/agent.json` (0600).
+With nothing selected, Strix's own `~/.strix/cli-config.json` is used unchanged; every scan
+plan prints the model it will use. See `docs/agent-config.md`.
+
 ## Tracker lifecycle
 
 `ingest.py` keys findings by (target, endpoint, method, finding-type bucket),

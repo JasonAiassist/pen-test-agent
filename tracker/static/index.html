@@ -80,7 +80,7 @@ button:disabled{opacity:.5;cursor:default}
 .fgroup{margin-bottom:14px}
 .fgroup label{display:block;color:var(--dim);font-size:11px;text-transform:uppercase;
   letter-spacing:.06em;margin-bottom:5px}
-input[type=text],textarea,select.field{width:100%;background:var(--chip);border:1px solid var(--border);
+input[type=text],#agKey,textarea,select.field{width:100%;background:var(--chip);border:1px solid var(--border);
   color:var(--text);border-radius:6px;padding:7px 10px;font:inherit;font-size:12px}
 textarea{resize:vertical;min-height:64px}
 .listbox{border:1px solid var(--border);border-radius:6px;background:var(--chip)}
@@ -234,6 +234,7 @@ select.field,input,textarea{max-width:100%}
     <div class="tab" data-tab="proj">Project</div>
     <div class="tab" data-tab="scan">New scan</div>
     <div class="tab" data-tab="auth">Authorisations</div>
+    <div class="tab" data-tab="agent">Agent config</div>
   </div>
 
   <!-- ================= Dashboard tab ================= -->
@@ -415,6 +416,7 @@ select.field,input,textarea{max-width:100%}
           <div class="proj-actions" style="margin:0">
             <button id="scanDry" title="validate the policy and show the plan without touching the target">Dry-run check</button>
             <button class="primary" id="scanStart" disabled>▶ Start scan</button>
+            <span class="proj-sub" id="scanAgentLine"></span>
             <button class="danger hidden" id="scanStop">■ Stop</button>
           </div></div>
       </div>
@@ -488,6 +490,57 @@ select.field,input,textarea{max-width:100%}
         <button class="danger" id="aRevoke" disabled>Revoke</button>
       </div>
       <div id="aAudit" class="proj-sub" style="margin-top:10px"></div>
+    </div>
+  </div>
+
+  <!-- ================= Agent config tab ================= -->
+  <div id="tab-agent" class="hidden" data-toptab="agent">
+    <div class="panel">
+      <h2>Model used by scans</h2>
+      <div class="lead">The AI model the Strix agent runs on. Choose a provider below and a model it offers.
+        <b>Strix default</b> leaves Strix's own <code id="agStrixPath">~/.strix/cli-config.json</code> in charge.
+        A change applies to the next scan you start; running scans keep the model they started with.</div>
+      <div class="banner" id="agEffective">loading…</div>
+      <div class="grid2">
+        <div class="fgroup"><label>Provider</label>
+          <select class="field" id="agActProvider"></select></div>
+        <div class="fgroup"><label>Model</label>
+          <input type="text" id="agActModel" list="agModelList" placeholder="choose or type a model id">
+          <datalist id="agModelList"></datalist>
+          <div class="proj-actions"><button id="agFetch" title="ask the provider which models it offers">Fetch models</button>
+            <span class="proj-sub" id="agFetchMsg"></span></div></div>
+        <div class="fgroup"><label>Reasoning effort</label>
+          <select class="field" id="agEffort"></select></div>
+      </div>
+      <div class="proj-actions"><button class="primary" id="agActSave">Use this model</button></div>
+    </div>
+    <div class="panel">
+      <h2>Model providers</h2>
+      <div class="lead">Connections to model providers. API keys are stored only on this machine in
+        <code id="agCfgPath">~/.config/penenv/agent.json</code> (readable only by you), are never shown again after saving,
+        and are never given to the agent's instructions or the scan sandbox.</div>
+      <div class="tscroll"><table id="agProvTable"></table></div>
+      <h2 id="agFormTitle" style="margin-top:16px">New provider</h2>
+      <div class="grid2">
+        <div class="fgroup"><label>Name</label>
+          <input type="text" id="agName" placeholder="e.g. Z.ai coding plan"></div>
+        <div class="fgroup"><label>Provider type</label>
+          <select class="field" id="agKind"></select></div>
+        <div class="fgroup"><label>Base URL <span id="agBaseHint"></span></label>
+          <input type="text" id="agBase" placeholder="https://api.example.com/v1"></div>
+        <div class="fgroup"><label>API key</label>
+          <input type="password" id="agKey" autocomplete="new-password" placeholder="paste the key"></div>
+        <div class="fgroup"><label>API type</label>
+          <select class="field" id="agApiType"><option value="">auto</option>
+            <option value="chat_completions">chat_completions</option><option value="responses">responses</option></select></div>
+      </div>
+      <div class="banner hidden" id="agBanner"></div>
+      <div class="proj-actions">
+        <button id="agNew">＋ new</button>
+        <button class="primary" id="agSave">Save provider</button>
+        <button class="danger" id="agDelete" disabled>Delete</button>
+        <button id="agImport" title="create a provider from the model, endpoint and key Strix is set up with now">Import from Strix config</button>
+      </div>
     </div>
   </div>
 
@@ -1244,6 +1297,102 @@ $('#pAuth').addEventListener('input',authProjectHint);
 loadAuths().catch(()=>{});
 authForm(null);
 
+/* ---------- agent config ---------- */
+let AG=null, agCur=null;
+function agKindInfo(k){return (AG?.kinds||[]).find(x=>x.kind===k)||{};}
+function agDescribe(e){
+  if(!e.model)return '⚠ No model is configured. Pick a provider and model below, or set STRIX_LLM in Strix\'s own config.';
+  return `Next scan uses <b>${esc(e.model)}</b> · ${esc(e.provider)}${e.api_base?' · '+esc(e.api_base):''}`+
+    ` · reasoning ${esc(e.reasoning_effort)}${e.has_key?'':' · <span class="proj-sub">no API key</span>'}`+
+    (e.source==='strix'?` <span class="proj-sub">(from ${esc(AG.strix_default.path)})</span>`:'');
+}
+async function loadAgent(){
+  AG=await jget('/api/agent');
+  $('#agStrixPath').textContent=AG.strix_default.path;$('#agCfgPath').textContent=AG.config_path;
+  $('#agEffective').innerHTML=agDescribe(AG.effective);
+  $('#agEffective').classList.toggle('warn',!AG.effective.model);
+  $('#scanAgentLine').innerHTML=AG.effective.model?'agent: '+esc(AG.effective.model):'⚠ no agent model configured';
+  const sd=AG.strix_default;
+  $('#agActProvider').innerHTML=`<option value="">Strix default${sd.model?' — '+esc(sd.model):''}</option>`+
+    AG.providers.map(p=>`<option value="${escAttr(p.id)}">${esc(p.name)} (${esc(p.kind)})</option>`).join('');
+  $('#agActProvider').value=AG.active.provider_id||'';
+  $('#agActModel').value=AG.active.model||'';
+  $('#agEffort').innerHTML=AG.efforts.map(x=>`<option>${x}</option>`).join('');
+  $('#agEffort').value=AG.active.reasoning_effort||'high';
+  $('#agKind').innerHTML=AG.kinds.map(k=>`<option value="${k.kind}">${esc(k.label)}</option>`).join('');
+  agActProviderChanged();
+  let h='<tr><th>Name</th><th>Type</th><th>Base URL</th><th>Key</th><th>Models</th><th></th></tr>';
+  for(const p of AG.providers){
+    const inUse=p.id===AG.active.provider_id;
+    h+=`<tr><td>${esc(p.name)}${inUse?' <span class="res-on">in use</span>':''}</td><td>${esc(p.kind)}</td>
+      <td>${esc(p.api_base||agKindInfo(p.kind).default_base||'')}</td><td>${p.api_key?'set':'—'}</td>
+      <td>${(p.models||[]).length}</td><td><span class="linkish" data-agedit="${escAttr(p.id)}">edit</span></td></tr>`;
+  }
+  $('#agProvTable').innerHTML=AG.providers.length?h:'<tr><td class="empty">No providers yet — add one below, or import the one Strix already uses.</td></tr>';
+  if(agCur&&!AG.providers.find(p=>p.id===agCur))agCur=null;
+  agForm(agCur);
+}
+function agActProviderChanged(){
+  const p=AG.providers.find(x=>x.id===$('#agActProvider').value);
+  $('#agActModel').disabled=!p;$('#agFetch').disabled=!p;
+  $('#agModelList').innerHTML=(p?.models||[]).map(m=>`<option value="${escAttr(m)}">`).join('');
+  $('#agFetchMsg').textContent=p?((p.models||[]).length?`${p.models.length} known model(s)`:''):'Strix default uses its own model setting.';
+  if(!p)$('#agActModel').value='';
+}
+function agForm(id){
+  agCur=id;const p=AG.providers.find(x=>x.id===id)||{kind:'openai-compatible'};
+  $('#agFormTitle').textContent=id?'Edit provider':'New provider';
+  $('#agName').value=p.name||'';$('#agKind').value=p.kind;$('#agBase').value=p.api_base||'';
+  $('#agKey').value=p.api_key||'';$('#agApiType').value=p.api_type||'';
+  $('#agDelete').disabled=!id;$('#agBanner').classList.add('hidden');agKindChanged();
+}
+function agKindChanged(){
+  const k=agKindInfo($('#agKind').value);
+  $('#agBaseHint').textContent=k.default_base?'(optional)':'(required)';
+  $('#agBase').placeholder=k.default_base||'https://api.example.com/v1';
+  $('#agKey').placeholder=k.needs_key?'paste the key':'not needed';
+}
+$('#agKind').onchange=agKindChanged;
+$('#agActProvider').onchange=()=>{agActProviderChanged();$('#agActModel').value='';};
+$('#agProvTable').addEventListener('click',e=>{const a=e.target.closest('[data-agedit]');if(a)agForm(a.dataset.agedit);});
+$('#agNew').onclick=()=>{agForm(null);$('#agName').focus();};
+$('#agSave').onclick=async()=>{
+  const body={name:$('#agName').value,kind:$('#agKind').value,api_base:$('#agBase').value,
+    api_key:$('#agKey').value,api_type:$('#agApiType').value};
+  try{const p=await jpost('/api/agent/providers'+(agCur?'/'+encodeURIComponent(agCur):''),body);
+    agCur=p.id;toast('provider saved');await loadAgent();}
+  catch(e){const b=$('#agBanner');b.textContent=e.message;b.className='banner warn';}
+};
+$('#agDelete').onclick=async()=>{
+  if(!agCur)return;const p=AG.providers.find(x=>x.id===agCur);
+  if(!await askConfirm(`Delete provider "${p.name}" and its stored API key?`+
+    (p.id===AG.active.provider_id?' Scans will fall back to the Strix default.':''),'Delete'))return;
+  try{await jpost('/api/agent/providers/'+encodeURIComponent(agCur),{},'DELETE');agCur=null;toast('provider deleted');await loadAgent();}
+  catch(e){toast(e.message,1);}
+};
+$('#agImport').onclick=async()=>{
+  try{const r=await jpost('/api/agent/import-strix',{});agCur=r.provider.id;await loadAgent();
+    $('#agActProvider').value=r.provider.id;agActProviderChanged();$('#agActModel').value=r.model;
+    $('#agEffort').value=r.reasoning_effort;toast('imported — press “Use this model” to select it');}
+  catch(e){toast(e.message,1);}
+};
+$('#agFetch').onclick=async()=>{
+  const id=$('#agActProvider').value;if(!id)return;const b=$('#agFetch');b.disabled=true;
+  $('#agFetchMsg').textContent='asking the provider…';
+  try{const r=await jpost(`/api/agent/providers/${encodeURIComponent(id)}/models`,{});
+    const p=AG.providers.find(x=>x.id===id);if(p)p.models=r.models;
+    $('#agModelList').innerHTML=r.models.map(m=>`<option value="${escAttr(m)}">`).join('');
+    $('#agFetchMsg').textContent=r.ok?`${r.models.length} model(s) available — pick one in the Model box`:r.error;}
+  catch(e){$('#agFetchMsg').textContent=e.message;}
+  b.disabled=false;
+};
+$('#agActSave').onclick=async()=>{
+  try{await jpost('/api/agent/active',{provider_id:$('#agActProvider').value,model:$('#agActModel').value.trim(),
+      reasoning_effort:$('#agEffort').value});toast('scan model updated');await loadAgent();}
+  catch(e){toast(e.message,1);}
+};
+loadAgent().catch(e=>{$('#agEffective').textContent='error: '+e.message;});
+
 /* ---------- wiring ---------- */
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 function escAttr(s){return esc(s).replace(/\n/g,' ');}
@@ -1253,6 +1402,7 @@ $$('.tab').forEach(t=>t.onclick=()=>{
   $$('[data-toptab]').forEach(sec=>sec.classList.toggle('hidden',sec.dataset.toptab!==want));
   if(want==='scan')scanTabShown();
   if(want==='auth')loadAuths().catch(e=>toast(e.message,1));
+  if(want==='agent'||want==='scan')loadAgent().catch(e=>toast(e.message,1));
 });
 $('#filterChips').addEventListener('click',e=>{
   const c=e.target.closest('.chip');if(!c)return;

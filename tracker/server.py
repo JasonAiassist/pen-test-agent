@@ -21,6 +21,15 @@ Projects (engagement configs persisted across scans):
 
   POST   /api/projects/validate       dry-run validation {config} -> {issues}
 
+Agent config (Strix model provider + model; stored in ~/.config/penenv/agent.json, keys masked):
+  GET    /api/agent                   providers, selection, effective model, Strix default
+  POST   /api/agent/providers         create provider {name, kind, api_base, api_key, api_type}
+  POST   /api/agent/providers/{id}    update provider (masked key sent back = keep stored key)
+  DELETE /api/agent/providers/{id}    remove provider
+  POST   /api/agent/providers/{id}/models   ask the provider for its model list (host-side)
+  POST   /api/agent/active            select {provider_id, model, reasoning_effort}; "" = Strix default
+  POST   /api/agent/import-strix      create a provider from ~/.strix/cli-config.json
+
 Keysafe secrets (password, api_key) are masked ("********") on read unless
 ?reveal=1 (audited); when a masked value is sent back on save, the stored
 secret for that entry id is kept. Saves are validated by scope.py: format,
@@ -56,6 +65,7 @@ PORT = int(os.environ.get("PENENV_PORT") or 8766)
 
 sys.path.insert(0, str(HERE))
 import ingest as ingest_mod  # noqa: E402
+import agentcfg  # noqa: E402
 import authenticator  # noqa: E402
 import authorisation as auth_mod  # noqa: E402
 import migrations  # noqa: E402
@@ -304,6 +314,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(self.api_runs())
             if u.path == "/api/policy/catalogue":
                 return self._json(self.api_policy_catalogue())
+            if u.path == "/api/agent":
+                return self._json(self.api_agent())
             parts = u.path.split("/")
             if len(parts) == 3 and parts[1] == "api" and parts[2] == "authorisations":
                 return self._json(self.api_auth_list())
@@ -350,6 +362,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(ingest_mod.ingest(verbose=False))
             if u.path == "/api/projects/validate":
                 return self._json(self.api_project_validate(body))
+            if len(parts) >= 3 and parts[1] == "api" and parts[2] == "agent":
+                return self._json(self.api_agent_post(parts[3:], body))
             if len(parts) == 3 and parts[1] == "api" and parts[2] == "authorisations":
                 return self._json(self.api_auth_save(body))
             if len(parts) == 4 and parts[1] == "api" and parts[2] == "authorisations":
@@ -385,9 +399,39 @@ class Handler(BaseHTTPRequestHandler):
             parts = u.path.split("/")
             if len(parts) == 4 and parts[1] == "api" and parts[2] == "projects":
                 return self._json(self.api_project_delete(parts[3]))
+            if len(parts) == 5 and parts[1:4] == ["api", "agent", "providers"]:
+                return self._json(self._agent_call(agentcfg.delete_provider, parts[4]) or {"ok": True})
             return self._json({"error": "not found"}, 404)
         except Exception as exc:  # noqa: BLE001
             return self._fail(exc)
+
+    # ---- agent config ----------------------------------------------------
+    @staticmethod
+    def _agent_call(fn, *a):
+        try:
+            return fn(*a)
+        except agentcfg.AgentConfigError as e:
+            raise ApiError(404 if str(e).startswith("unknown") else 400, str(e)) from None
+
+    def api_agent(self):
+        return {**agentcfg.masked(agentcfg.load()), "effective": agentcfg.effective(),
+                "strix_default": agentcfg.strix_default(), "kinds": agentcfg.kinds(),
+                "efforts": list(agentcfg.EFFORTS), "config_path": str(agentcfg.CONFIG_PATH)}
+
+    def api_agent_post(self, rest: list[str], body: dict):
+        if rest == ["providers"]:
+            p = self._agent_call(agentcfg.save_provider, body)
+            return {**p, "api_key": agentcfg._mask_key(p["api_key"])}
+        if len(rest) == 2 and rest[0] == "providers":
+            p = self._agent_call(agentcfg.save_provider, body, rest[1])
+            return {**p, "api_key": agentcfg._mask_key(p["api_key"])}
+        if len(rest) == 3 and rest[0] == "providers" and rest[2] == "models":
+            return self._agent_call(agentcfg.list_models, rest[1])
+        if rest == ["active"]:
+            return {"active": self._agent_call(agentcfg.set_active, body), "effective": agentcfg.effective()}
+        if rest == ["import-strix"]:
+            return self._agent_call(agentcfg.import_strix_default)
+        raise ApiError(404, "not found")
 
     # ---- API implementations -------------------------------------------
     def api_summary(self):

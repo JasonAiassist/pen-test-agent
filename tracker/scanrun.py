@@ -29,6 +29,7 @@ HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
 
+import agentcfg  # noqa: E402
 import cvefeed  # noqa: E402
 import policy  # noqa: E402
 import scope  # noqa: E402
@@ -262,6 +263,10 @@ def print_plan(name, p, targets, nets) -> None:
     if p.get("research"):
         print(f"research mode: ON (authorisation: {p.get('authorisation_ref') or '(inline)'})")
     print("CVE intelligence injected:", "yes" if p.get("cve_context") else "no")
+    a = agentcfg.effective()
+    print(f"agent model: {a['model'] or '(not configured)'} · provider {a['provider']}"
+          f"{' · ' + a['api_base'] if a['api_base'] else ''} · reasoning {a['reasoning_effort']}"
+          + ("" if a["source"] == "penenv" else f" (from {agentcfg.STRIX_CONFIG})"))
     for w in p["warnings"]:
         print("WARNING:", w)
     for e in p["errors"]:
@@ -384,6 +389,13 @@ def run(args) -> int:
         env.pop("NVD_API_KEY", None)  # host-side CVE feed credential; never handed to the agent
         env.update(p["strix"]["env"], STRIX_DOCKER_SANDBOX_NETWORK=net, PENENV_LAUNCH=str(launch),
                    STRIX_RUN_TYPE="penenv")
+        # Agent model chosen on the Agent config tab: a per-scan Strix config (0600, in the private
+        # work dir that is deleted below) replaces the shell's LLM variables for this run only.
+        strix_cfg, agent = agentcfg.scan_config(work)
+        if strix_cfg:
+            env = agentcfg.scrub_env(env)
+        events.append({"kind": "note", "detail": f"agent model {agent['model'] or '(unset)'} via "
+                       f"{agent['provider']}{' ' + agent['api_base'] if agent['api_base'] else ''}"})
         fds = ()
         if kdbx_pw:
             r, w = os.pipe()
@@ -393,6 +405,8 @@ def run(args) -> int:
             fds = (r,)
         before = set(os.listdir(ROOT / "strix_runs")) if (ROOT / "strix_runs").is_dir() else set()
         cmd = [str(STRIX_PY), str(LAUNCHER), *strix_args(p, targets, instr, args.max_budget, args.max_turns)]
+        if strix_cfg:
+            cmd += ["--config", str(strix_cfg)]
         log(f"scan {sid}: network {net} ({subnet}), gateway {gw} {gw_ip}, Caido channel 127.0.0.1:{port}")
         events.append({"kind": "start", "detail": " ".join(cmd[2:])[:3900]})
         rc = subprocess.run(cmd, cwd=ROOT, env=env, pass_fds=fds).returncode
