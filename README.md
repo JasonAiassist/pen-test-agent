@@ -8,6 +8,8 @@ vulnerability tracker (dashboard, lifecycle, trends).
 image are installed separately. Step-by-step setup (written for AI agents, also usable by
 humans): [`AGENT_README.md`](AGENT_README.md).
 
+**Using it?** Checklist and tab-by-tab guide to the dashboard: [`docs/HELP_SHEET.md`](docs/HELP_SHEET.md).
+
 ```
 penenv/
 ├── bin/penenv              # CLI wrapper (strix, demo targets, tracker)
